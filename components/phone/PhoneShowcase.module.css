@@ -268,22 +268,37 @@
   border-radius: 50%;
 }
 .ring {
-  background: #2a3043;
+  background: #333a50;
 }
 .glass {
-  /* Simple lens: navy ring, thin light edge, black glass, one soft highlight. */
+  /* Lens you can see into: light navy rim, charcoal glass with faint concentric
+     elements, a slightly lighter center element and two soft reflections. */
   background:
-    radial-gradient(circle at 40% 36%, rgba(255, 255, 255, 0.16) 0 5%, transparent 10%),
+    radial-gradient(circle at 44% 41%, rgba(235, 220, 240, 0.6) 0 2.5%, transparent 5.5%),
+    radial-gradient(circle at 57% 57%, rgba(255, 175, 200, 0.4) 0 2%, transparent 4.5%),
+    radial-gradient(circle at 47% 46%, rgba(125, 135, 175, 0.22) 0 10%, transparent 20%),
     radial-gradient(
       circle closest-side,
-      #0c0e14 0 34%,
-      #10131b 50%,
-      #1b1f2b 55%,
-      #4a526b 58% 60%,
-      #353c52 62% 93%,
-      #5a627d 96%,
+      #232838 0 9%,
+      #161a24 13%,
+      #262b3b 17%,
+      #12151e 21% 31%,
+      #1d2131 34%,
+      #10131b 37% 50%,
+      #1a1e2b 53%,
+      #0e1118 56% 74%,
+      #222738 77%,
+      #13161e 80% 83%,
+      #2b3145 85%,
+      #737c99 88%,
+      #434b66 91% 95%,
+      #6a7290 97%,
       transparent 99%
     );
+  box-shadow:
+    inset 2px 2px 2px rgba(255, 255, 255, 0.12),
+    inset -1px -1px 2px rgba(0, 0, 0, 0.4),
+    0 2px 5px rgba(0, 0, 0, 0.35);
 }
 .l1 { top: 4px; left: 10px; }
 .l2 { top: 68px; left: 10px; }
