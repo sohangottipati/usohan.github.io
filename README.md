@@ -12,4 +12,4 @@ Deploys automatically on push to `main`. Custom domain is set via `public/CNAME`
 
 ## Homepage phone
 
-The hero is a scroll-driven CSS 3D iPhone (`components/phone/PhoneShowcase.tsx`). Its screen lists projects from `components/phone/projects.tsx`; give an entry a `demo` URL and tapping it loads that site inside the phone.
+The hero is a scroll-driven CSS 3D iPhone (`components/phone/PhoneShowcase.tsx`). Its screen lists projects from `components/phone/projects.tsx`; give an entry a `demo` URL and tapping it opens that site.

@@ -10,6 +10,8 @@ import s from './PhoneShowcase.module.css';
 const PHONE_H = 620;
 const PHONE_W = 300;
 const DEPTH = 18; // phone thickness in px
+const BUMP = 7; // camera plateau height
+const LENS = 5; // how far each lens ring rises above the plateau
 const RIM_LAYERS = 18; // stacked rounded slices that fake a rounded metal edge
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -20,7 +22,7 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 
 /**
  * Scroll-driven hero: an iPhone floats with its back to the viewer, spins
  * around as you scroll, then its screen wakes up with a project picker.
- * Tapping a project loads its live demo inside the phone.
+ * Tapping a project opens its live demo site.
  *
  * Built with plain CSS 3D transforms (not WebGL) so the screen is real,
  * clickable DOM. Uses position: sticky rather than a GSAP pin, so normal
@@ -38,18 +40,6 @@ export function PhoneShowcase() {
   const shadowRef = useRef<HTMLDivElement>(null);
 
   const [screenOn, setScreenOn] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [demoSrc, setDemoSrc] = useState<string | null>(null);
-
-  const open = openId ? PHONE_PROJECTS.find((p) => p.id === openId) : undefined;
-  const openDemo = open && !open.soon ? open.demo : null;
-
-  function openProject(id: string) {
-    const p = PHONE_PROJECTS.find((x) => x.id === id);
-    if (!p || p.soon) return;
-    setDemoSrc(p.demo);
-    setOpenId(id);
-  }
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -141,8 +131,9 @@ export function PhoneShowcase() {
     };
   }, []);
 
-  const tab = (visible: boolean) => (screenOn && visible ? 0 : -1);
   const rimLayers = Array.from({ length: RIM_LAYERS }, (_, i) => -DEPTH / 2 + (DEPTH * (i + 0.5)) / RIM_LAYERS);
+  const bumpLayers = Array.from({ length: BUMP }, (_, i) => i + 0.5);
+  const lensLayers = Array.from({ length: LENS }, (_, i) => BUMP + i + 0.5);
 
   return (
     <div ref={stageRef} className={s.stage}>
@@ -183,23 +174,34 @@ export function PhoneShowcase() {
               ))}
 
               <div className={`${s.face} ${s.back}`} style={{ transform: `rotateY(180deg) translateZ(${DEPTH / 2 + 0.5}px)` }}>
+                {/* Camera plateau + lenses are stacked slices so they stand off the back in 3D. */}
                 <div className={s.camera}>
-                  <div className={`${s.lens} ${s.l1}`} />
-                  <div className={`${s.lens} ${s.l2}`} />
-                  <div className={`${s.lens} ${s.l3}`} />
-                  <div className={s.flash} />
+                  {bumpLayers.map((z) => (
+                    <div key={z} className={s.bumpSlice} style={{ transform: `translateZ(${z}px)` }} />
+                  ))}
+                  <div className={s.bumpTop} style={{ transform: `translateZ(${BUMP}px)` }}>
+                    <div className={s.flash} />
+                  </div>
+                  {[s.l1, s.l2, s.l3].map((pos) => (
+                    <div key={pos} className={`${s.lensBarrel} ${pos}`}>
+                      {lensLayers.map((z) => (
+                        <div key={z} className={s.ring} style={{ transform: `translateZ(${z}px)` }} />
+                      ))}
+                      <div className={s.glass} style={{ transform: `translateZ(${BUMP + LENS}px)` }} />
+                    </div>
+                  ))}
                 </div>
-                <div className={`${s.monogram} font-serif`}>S.</div>
+                <div className={`${s.monogram} font-serif`} style={{ transform: 'translate(-50%, -50%) translateZ(0.2px)' }}>
+                  S.
+                </div>
               </div>
 
               <div className={`${s.face} ${s.front}`} style={{ transform: `translateZ(${DEPTH / 2 + 0.5}px)` }}>
-                <div
-                  className={`${s.screen} ${openId ? s.inApp : ''}`}
-                  style={{ pointerEvents: screenOn ? 'auto' : 'none' }}>
+                <div className={s.screen} style={{ pointerEvents: screenOn ? 'auto' : 'none' }}>
                   <div className={s.island} />
                   <StatusBar />
 
-                  <div className={`${s.view} ${s.home}`} aria-hidden={!!openId}>
+                  <div className={`${s.view} ${s.home}`}>
                     <h3 className={s.homeTitle}>Projects</h3>
                     <div className={s.homeSub}>Tap one to open a live demo</div>
                     {PHONE_PROJECTS.map((p) =>
@@ -216,12 +218,7 @@ export function PhoneShowcase() {
                           </div>
                         </div>
                       ) : (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className={s.proj}
-                          tabIndex={tab(!openId)}
-                          onClick={() => openProject(p.id)}>
+                        <a key={p.id} href={p.demo} className={s.proj} tabIndex={screenOn ? 0 : -1}>
                           <div className={s.row}>
                             <div className={s.appIcon}>{p.icon}</div>
                             <div>
@@ -233,40 +230,12 @@ export function PhoneShowcase() {
                             <span>{p.meta}</span>
                             <span className={s.pill}>Open demo</span>
                           </div>
-                        </button>
+                        </a>
                       )
                     )}
                   </div>
 
-                  <div className={`${s.view} ${s.app}`} aria-hidden={!openId}>
-                    <div className={s.appTop}>
-                      <button type="button" className={s.back2} tabIndex={tab(!!openId)} onClick={() => setOpenId(null)}>
-                        <svg width="12" height="20" viewBox="0 0 12 20" aria-hidden>
-                          <path d="M10 2 2 10l8 8" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                        Projects
-                      </button>
-                      {openDemo && (
-                        <a className={s.back2} href={openDemo} target="_blank" rel="noopener" tabIndex={tab(true)}>
-                          Full screen ↗
-                        </a>
-                      )}
-                    </div>
-                    <div className={s.frameWrap}>
-                      <div className={s.loading}>Loading demo…</div>
-                      {demoSrc && (
-                        <iframe src={demoSrc} title={`${open?.name ?? 'Project'} live demo`} className={s.iframe} allow="geolocation" />
-                      )}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    className={s.homeBar}
-                    aria-label="Back to projects"
-                    tabIndex={tab(!!openId)}
-                    onClick={() => setOpenId(null)}
-                  />
+                  <div className={s.homeBar} />
                   <div ref={darkRef} className={s.screenDark} />
                 </div>
               </div>
@@ -278,7 +247,7 @@ export function PhoneShowcase() {
           <div className={s.eyebrow}>Projects</div>
           <h2 className={`${s.capTitle} font-serif`}>Tap an app to try it.</h2>
           <p className={s.capBody}>
-            Each project runs as a live demo right on the phone. Studispot is up first, with more on the way.
+            Tap a project on the phone to open its live demo. Studispot is up first, with more on the way.
           </p>
         </div>
 

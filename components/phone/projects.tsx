@@ -7,7 +7,7 @@ export type PhoneProject =
 /**
  * Apps shown on the phone screen. To add a project, replace one of the
  * "Coming soon" entries with an object that has a `demo` URL — tapping it
- * loads that URL inside the phone.
+ * opens that URL.
  */
 export const PHONE_PROJECTS: PhoneProject[] = [
   {

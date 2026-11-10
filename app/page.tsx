@@ -8,7 +8,7 @@ export default function Home() {
     <>
       <SectionTab />
       <PhoneShowcase />
-      <main className="relative z-10 m-3 rounded-[20px] bg-[var(--bg)]">
+      <main className="relative z-10 bg-[var(--bg)]">
         <SkillsStagger />
         <Connect />
       </main>
