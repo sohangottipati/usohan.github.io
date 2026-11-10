@@ -10,8 +10,8 @@ import s from './PhoneShowcase.module.css';
 const PHONE_H = 620;
 const PHONE_W = 300;
 const DEPTH = 18; // phone thickness in px
-const BUMP = 7; // camera plateau height
-const LENS = 5; // how far each lens ring rises above the plateau
+const BUMP = 4; // camera plateau height
+const LENS = 3; // how far each lens ring rises above the plateau
 const RIM_LAYERS = 18; // stacked rounded slices that fake a rounded metal edge
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -185,7 +185,11 @@ export function PhoneShowcase() {
               ))}
 
               <div className={`${s.face} ${s.back}`} style={{ transform: `rotateY(180deg) translateZ(${DEPTH / 2 + 0.5}px)` }}>
-                {/* Camera plateau + lenses are stacked slices so they stand off the back in 3D. */}
+                {/* Lower glass panel, slightly different finish from the frame band. */}
+                <div className={s.panel} style={{ transform: 'translateZ(0.2px)' }}>
+                  <div className={`${s.monogram} font-serif`}>S.</div>
+                </div>
+                {/* Full-width camera plateau + lenses, stacked slices so they stand off the back in 3D. */}
                 <div className={s.camera}>
                   {bumpLayers.map((z) => (
                     <div key={z} className={s.bumpSlice} style={{ transform: `translateZ(${z}px)` }} />
@@ -203,9 +207,6 @@ export function PhoneShowcase() {
                       <div className={s.glass} style={{ transform: `translateZ(${BUMP + LENS}px)` }} />
                     </div>
                   ))}
-                </div>
-                <div className={`${s.monogram} font-serif`} style={{ transform: 'translate(-50%, -50%) translateZ(0.2px)' }}>
-                  S.
                 </div>
               </div>
 

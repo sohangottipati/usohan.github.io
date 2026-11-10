@@ -159,15 +159,14 @@
   border-radius: var(--radius);
 }
 .rim {
-  /* Polished stainless edge; --rimx slides the highlights as the phone turns. */
+  /* Brushed navy titanium: low-contrast highlights that drift with rotation. */
   background: linear-gradient(
     90deg,
-    #1c1d20 0%, #6f727a 6%, #f4f5f7 9%, #8b8e95 12%, #2a2b2f 20%,
-    #4a4c52 30%, #c9ccd2 36%, #5b5e64 41%, #1f2023 50%,
-    #55585e 58%, #e7e9ec 64%, #6c6f75 69%, #26272b 78%,
-    #7d8087 86%, #f7f8fa 90%, #6f727a 94%, #1c1d20 100%
+    #2a3042 0%, #4a5269 8%, #6b7390 11%, #48506a 15%, #2f3548 26%,
+    #3a4157 40%, #5a6280 46%, #3a4157 52%, #2b3144 62%,
+    #434b63 74%, #646c89 80%, #434b63 86%, #2a3042 100%
   );
-  background-size: 320% 100%;
+  background-size: 260% 100%;
   background-position: var(--rimx, 50%) 0;
 }
 .face {
@@ -176,72 +175,66 @@
 }
 .front {
   background: #050505;
-  box-shadow: inset 0 0 0 1.5px #8d9097, inset 0 0 0 3px #1a1b1e, inset 0 0 0 4px #050505;
+  box-shadow: inset 0 0 0 1.5px #5a627d, inset 0 0 0 3px #1c2030, inset 0 0 0 4px #050505;
 }
 .back {
   transform-style: preserve-3d;
-  /* Glossy glass back: moving specular band + soft sky reflection + deep base. */
+  /* Satin navy titanium band: soft top-light, faint moving sheen, no mirror gloss. */
   background:
     linear-gradient(
       112deg,
-      transparent calc(var(--gx, 50%) - 34%),
-      rgba(255, 255, 255, 0.05) calc(var(--gx, 50%) - 16%),
-      rgba(255, 255, 255, 0.34) calc(var(--gx, 50%) - 2%),
-      rgba(255, 255, 255, 0.42) var(--gx, 50%),
-      rgba(255, 255, 255, 0.06) calc(var(--gx, 50%) + 12%),
+      transparent calc(var(--gx, 50%) - 30%),
+      rgba(255, 255, 255, 0.07) var(--gx, 50%),
       transparent calc(var(--gx, 50%) + 30%)
     ),
+    linear-gradient(180deg, #4d556d 0%, #414860 35%, #363c52 100%);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(150, 160, 190, 0.35),
+    inset 0 0 0 3px rgba(20, 24, 36, 0.5);
+}
+.panel {
+  /* Matte glass panel below the camera plateau. */
+  position: absolute;
+  top: 168px;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  border-radius: 40px;
+  background:
     linear-gradient(
       112deg,
-      transparent calc(var(--gx, 50%) + 26%),
-      rgba(255, 255, 255, 0.12) calc(var(--gx, 50%) + 32%),
-      transparent calc(var(--gx, 50%) + 38%)
+      transparent calc(var(--gx, 50%) - 30%),
+      rgba(255, 255, 255, 0.05) var(--gx, 50%),
+      transparent calc(var(--gx, 50%) + 30%)
     ),
-    linear-gradient(180deg, rgba(190, 225, 250, 0.16), transparent 38%, transparent 70%, rgba(255, 255, 255, 0.05)),
-    linear-gradient(160deg, #2c2f35, #17181c 55%, #0d0e11);
-  box-shadow:
-    inset 0 0 0 1.5px rgba(255, 255, 255, 0.28),
-    inset 0 0 0 3px rgba(0, 0, 0, 0.6),
-    inset 0 0 24px rgba(0, 0, 0, 0.5);
+    linear-gradient(180deg, #3e4560 0%, #353b52 50%, #2c3246 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 .camera {
   position: absolute;
-  top: 18px;
-  left: 18px;
-  width: 132px;
-  height: 132px;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  height: 142px;
   transform-style: preserve-3d;
 }
 .bumpSlice,
 .bumpTop {
   position: absolute;
   inset: 0;
-  border-radius: 38px;
+  border-radius: 40px 40px 26px 26px;
 }
 .bumpSlice {
-  background: #23252a;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  background: #2d3346;
 }
 .bumpTop {
-  /* Same glass as the back, catching the same moving highlight, with a bright chamfered edge. */
-  background:
-    linear-gradient(
-      112deg,
-      transparent calc(var(--gx, 50%) * 2.2 - 70%),
-      rgba(255, 255, 255, 0.32) calc(var(--gx, 50%) * 2.2 - 40%),
-      transparent calc(var(--gx, 50%) * 2.2 - 10%)
-    ),
-    linear-gradient(150deg, #3a3d44, #1d1f24 60%, #15161a);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
-    inset 0 1.5px 0 1px rgba(255, 255, 255, 0.18),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.5),
-    0 0 0 0.5px rgba(0, 0, 0, 0.6);
+  background: linear-gradient(180deg, #4f5770 0%, #444b63 60%, #3c435a 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 0 0 1px rgba(160, 170, 200, 0.18), inset 0 -2px 3px rgba(0, 0, 0, 0.18);
 }
 .lensBarrel {
   position: absolute;
-  width: 54px;
-  height: 54px;
+  width: 62px;
+  height: 62px;
   transform-style: preserve-3d;
 }
 .ring,
@@ -251,80 +244,64 @@
   border-radius: 50%;
 }
 .ring {
-  /* Brushed-steel barrel wall. */
-  background: conic-gradient(from var(--ang, 0deg), #a7aab0, #3a3c41, #e9ebee, #2b2d31, #8f9298, #f5f6f8, #3a3c41, #a7aab0);
+  background: #2a3043;
 }
 .glass {
+  /* Simple lens: navy ring, thin light edge, black glass, one soft highlight. */
   background:
-    /* specular glint that drifts with rotation */
-    radial-gradient(circle at calc(34% + var(--gy, 0%) * 0.2) calc(30% - var(--gy, 0%) * 0.2), rgba(255, 255, 255, 0.85) 0 2.5%, rgba(255, 255, 255, 0.2) 6%, transparent 10%),
-    radial-gradient(ellipse 30% 14% at 62% 70%, rgba(255, 255, 255, 0.18), transparent),
-    /* anti-reflective coating tints */
-    radial-gradient(circle at 60% 62%, rgba(142, 92, 255, 0.55), transparent 17%),
-    radial-gradient(circle at 42% 44%, rgba(64, 210, 190, 0.3), transparent 19%),
-    radial-gradient(circle at 52% 34%, rgba(255, 170, 80, 0.18), transparent 14%),
-    /* lens stack: element, aperture, inner barrel, black gap */
+    radial-gradient(circle at 40% 36%, rgba(255, 255, 255, 0.16) 0 5%, transparent 10%),
     radial-gradient(
       circle closest-side,
-      #0d1a38 0 20%,
-      #060912 26%,
-      #020305 44%,
-      #2a2d35 47% 50%,
-      #050608 52% 70%,
-      #6d7077 72% 73%,
-      #000 75% 79%,
-      transparent 80%
-    ),
-    /* polished steel lens ring */
-    conic-gradient(from calc(var(--ang, 0deg) + 40deg), #f2f3f5, #6b6e74, #c4c7cc, #2f3135, #e6e8eb, #55585e, #f2f3f5);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+      #0c0e14 0 40%,
+      #10131b 58%,
+      #1b1f2b 64%,
+      #4a526b 67% 69%,
+      #353c52 71% 93%,
+      #5a627d 96%,
+      transparent 99%
+    );
 }
-.l1 { top: 10px; left: 10px; }
-.l2 { top: 68px; left: 10px; }
-.l3 { top: 39px; left: 68px; }
+.l1 { top: 0; left: 9px; }
+.l2 { top: 80px; left: 9px; }
+.l3 { top: 40px; left: 82px; }
 .flash {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 16px;
-  height: 16px;
+  top: 14px;
+  right: 24px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  /* Fresnel ridges under frosted glass */
-  background:
-    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.8), transparent 35%),
-    repeating-radial-gradient(circle, #f4edd6 0 1px, #cfc5a6 1px 2px);
-  box-shadow: 0 0 0 1.5px #55575c, 0 0 0 2.5px #111;
+  background: radial-gradient(circle, #fbfbf8 0 35%, #e6e5df 65%, #c9c8c2 100%);
+  box-shadow: 0 0 0 2px #353c52;
 }
 .lidar {
   position: absolute;
-  bottom: 18px;
-  right: 18px;
-  width: 14px;
-  height: 14px;
+  bottom: 22px;
+  right: 24px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.35), transparent 30%),
-    radial-gradient(circle, #2a1d3d, #08070c 70%);
-  box-shadow: 0 0 0 1.5px #3a3c41, 0 0 0 2.5px #0a0a0b;
+  background: #0d0f15;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 .mic {
   position: absolute;
-  top: 58px;
-  right: 22px;
-  width: 4px;
-  height: 4px;
+  top: 66px;
+  right: 34px;
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
-  background: #050505;
-  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.25);
+  background: #12151d;
 }
 .monogram {
   position: absolute;
   top: 46%;
   left: 50%;
-  font-size: 56px;
+  transform: translate(-50%, -50%);
+  font-size: 60px;
   font-weight: 900;
-  color: rgba(255, 255, 255, 0.16);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.12), 0 -1px 0 rgba(0, 0, 0, 0.6);
+  color: #2b3043;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .shadow {
@@ -376,7 +353,7 @@
       118deg,
       transparent calc(var(--fx, 40%) - 30%),
       rgba(255, 255, 255, 0.04) calc(var(--fx, 40%) - 12%),
-      rgba(255, 255, 255, 0.16) var(--fx, 40%),
+      rgba(255, 255, 255, 0.07) var(--fx, 40%),
       rgba(255, 255, 255, 0.03) calc(var(--fx, 40%) + 10%),
       transparent calc(var(--fx, 40%) + 26%)
     ),
