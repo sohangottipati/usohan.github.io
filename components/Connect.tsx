@@ -2,9 +2,12 @@ import { Reveal } from '@/components/Reveal';
 
 export function Connect() {
   return (
-    <section id="connect" className="mx-auto max-w-[760px] border-t border-[var(--border)] px-6 pb-16 pt-24">
+    <section id="connect">
       <Reveal>
-        <h2 className="mb-6 text-[13px] font-bold uppercase tracking-[0.08em] text-[var(--sub)]">Connect</h2>
+        <p className="mb-2 text-[13px] font-bold uppercase tracking-[0.08em] text-[var(--accent)]">Connect</p>
+        <h2 className="mb-6 font-serif text-[clamp(28px,3.4vw,40px)] font-semibold leading-[1.1] tracking-[-0.01em] text-[var(--ink)]">
+          Let&rsquo;s talk.
+        </h2>
         <div className="flex flex-wrap gap-3">
           <a
             href="https://www.linkedin.com/in/sgot"
@@ -38,7 +41,6 @@ export function Connect() {
         </div>
       </Reveal>
 
-      <footer className="pt-12 text-center text-[13px] text-[var(--sub)]">Sohan Gottipati</footer>
     </section>
   );
 }
