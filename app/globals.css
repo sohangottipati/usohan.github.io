@@ -37,6 +37,8 @@ html {
 body {
   background: var(--bg);
   color: var(--ink);
+  /* Site-wide lowercase look. Logo marks opt out with `normal-case`. */
+  text-transform: lowercase;
 }
 
 @keyframes floatCue {

@@ -39,7 +39,7 @@ export function SkillsStagger() {
 
   return (
     <section id="skills">
-      <p className="mb-2 text-[13px] font-bold uppercase tracking-[0.08em] text-[var(--accent)]">Stack</p>
+      <p className="mb-2 text-[13px] font-bold tracking-[0.02em] text-[var(--accent)]">Stack</p>
       <h2 className="mb-6 font-serif text-[clamp(28px,3.4vw,40px)] font-semibold leading-[1.1] tracking-[-0.01em] text-[var(--ink)]">
         What I build with.
       </h2>

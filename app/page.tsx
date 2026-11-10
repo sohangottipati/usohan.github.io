@@ -16,7 +16,7 @@ export default function Home() {
         <footer className="mx-auto max-w-[1100px] px-6 md:px-10">
           <div className="flex items-center justify-between gap-4 border-t border-[var(--border)] py-6 text-[13px] text-[var(--sub)]">
             <span>Sohan Gottipati</span>
-            <span>UC Riverside · Computer Science</span>
+            <span>CS + Business @ UCR</span>
           </div>
         </footer>
       </main>

@@ -175,7 +175,7 @@ export function PhoneShowcase() {
         <ThemeToggle />
 
         <div ref={heroRef} className={s.hero}>
-          <p className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.1em] opacity-75">
+          <p className="mb-3.5 text-[13px] font-bold tracking-[0.02em] opacity-75">
             Computer Science · UC Riverside
           </p>
           <h1 className="font-serif text-[clamp(36px,7vw,72px)] font-semibold leading-[1.05] tracking-[-0.01em]">
@@ -224,7 +224,7 @@ export function PhoneShowcase() {
               <div className={`${s.face} ${s.back}`} style={{ transform: `rotateY(180deg) translateZ(${DEPTH / 2 + 0.5}px)` }}>
                 {/* Lower glass panel, slightly different finish from the frame band. */}
                 <div className={s.panel} style={{ transform: 'translateZ(0.2px)' }}>
-                  <div className={`${s.monogram} font-serif`}>S.</div>
+                  <div className={`${s.monogram} font-serif normal-case`}>S.</div>
                 </div>
                 {/* Full-width camera plateau + lenses, stacked slices so they stand off the back in 3D. */}
                 <div className={s.camera}>

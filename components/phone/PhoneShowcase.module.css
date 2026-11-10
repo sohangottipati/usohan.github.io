@@ -72,8 +72,7 @@
   gap: 8px;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   opacity: 0.8;
   pointer-events: none;
 }
@@ -103,8 +102,7 @@
 .eyebrow {
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   opacity: 0.75;
 }
 .capTitle {
