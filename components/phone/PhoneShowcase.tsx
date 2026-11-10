@@ -21,7 +21,15 @@ const SIDE_BUTTONS = [
   { side: 'right', top: 178, h: 70 },
   { side: 'right', top: 392, h: 64, flush: true },
 ] as const;
-const BUTTON_LAYERS = [-3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5];
+const BUTTON_POKE = 4; // how far buttons stand off the frame, px
+const BUTTON_HALF_DEPTH = 4.5;
+// Slices across the button's depth; each pokes out less toward the faces so the
+// cross-section is rounded (a pill) rather than a flat block.
+const BUTTON_LAYERS = Array.from({ length: 18 }, (_, i) => {
+  const z = -BUTTON_HALF_DEPTH + 0.25 + i * 0.5;
+  const poke = BUTTON_POKE * Math.sqrt(Math.max(0, 1 - (z / BUTTON_HALF_DEPTH) ** 2));
+  return { z, poke };
+});
 const RIM_LAYERS = 18; // stacked rounded slices that fake a rounded metal edge
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -195,13 +203,22 @@ export function PhoneShowcase() {
               ))}
 
               {SIDE_BUTTONS.map((b) =>
-                BUTTON_LAYERS.map((z) => (
-                  <div
-                    key={`${b.side}-${b.top}-${z}`}
-                    className={`${s.sideButton} ${b.side === 'left' ? s.btnLeft : s.btnRight} ${'flush' in b ? s.btnFlush : ''}`}
-                    style={{ top: b.top, height: b.h, transform: `translateZ(${z}px)` }}
-                  />
-                ))
+                BUTTON_LAYERS.map(({ z, poke }) => {
+                  const out = 'flush' in b ? poke * 0.45 : poke;
+                  return (
+                    <div
+                      key={`${b.side}-${b.top}-${z}`}
+                      className={`${s.sideButton} ${'flush' in b ? s.btnFlush : ''}`}
+                      style={{
+                        top: b.top,
+                        height: b.h,
+                        width: out + 2,
+                        [b.side]: -out,
+                        transform: `translateZ(${z}px)`,
+                      }}
+                    />
+                  );
+                })
               )}
 
               <div className={`${s.face} ${s.back}`} style={{ transform: `rotateY(180deg) translateZ(${DEPTH / 2 + 0.5}px)` }}>

@@ -170,28 +170,15 @@
   background-position: var(--rimx, 50%) 0;
 }
 .sideButton {
-  /* Stacked slices so each button reads as a small block standing off the frame edge. */
+  /* Stacked slices with fully rounded ends; JS sets each slice's width so the
+     depth profile is rounded too. */
   position: absolute;
-  width: 4px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, #5d6582, #3f465d 30%, #353c51 70%, #2a3042);
-}
-.btnLeft {
-  left: -2.5px;
-}
-.btnRight {
-  right: -2.5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #66708e, #454c64 25%, #363d52 75%, #2a3042);
 }
 .btnFlush {
   /* Camera Control: sapphire-covered, sits nearly flush and reads darker. */
-  width: 3px;
   background: linear-gradient(180deg, #4a5168, #23283a 40%, #1b2030);
-}
-.btnLeft.btnFlush {
-  left: -1.5px;
-}
-.btnRight.btnFlush {
-  right: -1.5px;
 }
 .face {
   backface-visibility: hidden;
