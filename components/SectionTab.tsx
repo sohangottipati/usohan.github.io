@@ -53,10 +53,10 @@ export function SectionTab() {
       onClick={jumpToNext}
       aria-label={`Currently viewing ${current.label}. Jump to next section.`}
       className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center overflow-hidden rounded-l-2xl border border-r-0 border-[var(--border)] bg-[var(--bg)] shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-transform duration-200 ease-out hover:-translate-x-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] active:scale-[0.97]">
-      <span className="flex h-11 w-11 items-center justify-center border-b border-[var(--border)] font-serif text-lg font-bold text-[var(--accent)]">
+      <span className="flex h-11 w-11 items-center justify-center border-b border-[var(--border)] font-serif text-lg font-bold normal-case text-[var(--accent)]">
         S.
       </span>
-      <span className="px-2.5 py-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--sub)]" style={{ writingMode: 'vertical-rl' }}>
+      <span className="px-2.5 py-4 text-[11px] font-bold lowercase tracking-[0.02em] text-[var(--sub)]" style={{ writingMode: 'vertical-rl' }}>
         {current.label}
       </span>
     </button>

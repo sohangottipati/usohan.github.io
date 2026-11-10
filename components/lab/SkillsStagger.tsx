@@ -38,8 +38,11 @@ export function SkillsStagger() {
   }, []);
 
   return (
-    <section id="skills" className="mx-auto max-w-[760px] border-t border-[var(--border)] px-6 py-24">
-      <h2 className="mb-6 text-[13px] font-bold uppercase tracking-[0.08em] text-[var(--sub)]">Stack</h2>
+    <section id="skills">
+      <p className="mb-2 text-[13px] font-bold tracking-[0.02em] text-[var(--accent)]">Stack</p>
+      <h2 className="mb-6 font-serif text-[clamp(28px,3.4vw,40px)] font-semibold leading-[1.1] tracking-[-0.01em] text-[var(--ink)]">
+        What I build with.
+      </h2>
       <div ref={ref} className="flex flex-wrap gap-3">
         {SKILLS.map((skill) => (
           <span
