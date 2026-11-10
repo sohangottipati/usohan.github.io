@@ -169,6 +169,30 @@
   background-size: 260% 100%;
   background-position: var(--rimx, 50%) 0;
 }
+.sideButton {
+  /* Stacked slices so each button reads as a small block standing off the frame edge. */
+  position: absolute;
+  width: 4px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #5d6582, #3f465d 30%, #353c51 70%, #2a3042);
+}
+.btnLeft {
+  left: -2.5px;
+}
+.btnRight {
+  right: -2.5px;
+}
+.btnFlush {
+  /* Camera Control: sapphire-covered, sits nearly flush and reads darker. */
+  width: 3px;
+  background: linear-gradient(180deg, #4a5168, #23283a 40%, #1b2030);
+}
+.btnLeft.btnFlush {
+  left: -1.5px;
+}
+.btnRight.btnFlush {
+  right: -1.5px;
+}
 .face {
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
@@ -195,7 +219,7 @@
 .panel {
   /* Matte glass panel below the camera plateau. */
   position: absolute;
-  top: 168px;
+  top: 160px;
   left: 14px;
   right: 14px;
   bottom: 14px;
@@ -215,7 +239,7 @@
   top: 14px;
   left: 14px;
   right: 14px;
-  height: 142px;
+  height: 134px;
   transform-style: preserve-3d;
 }
 .bumpSlice,
@@ -252,18 +276,18 @@
     radial-gradient(circle at 40% 36%, rgba(255, 255, 255, 0.16) 0 5%, transparent 10%),
     radial-gradient(
       circle closest-side,
-      #0c0e14 0 40%,
-      #10131b 58%,
-      #1b1f2b 64%,
-      #4a526b 67% 69%,
-      #353c52 71% 93%,
+      #0c0e14 0 34%,
+      #10131b 50%,
+      #1b1f2b 55%,
+      #4a526b 58% 60%,
+      #353c52 62% 93%,
       #5a627d 96%,
       transparent 99%
     );
 }
-.l1 { top: 0; left: 9px; }
-.l2 { top: 80px; left: 9px; }
-.l3 { top: 40px; left: 82px; }
+.l1 { top: 4px; left: 10px; }
+.l2 { top: 68px; left: 10px; }
+.l3 { top: 36px; left: 70px; }
 .flash {
   position: absolute;
   top: 14px;
@@ -276,7 +300,7 @@
 }
 .lidar {
   position: absolute;
-  bottom: 22px;
+  bottom: 18px;
   right: 24px;
   width: 24px;
   height: 24px;
@@ -286,7 +310,7 @@
 }
 .mic {
   position: absolute;
-  top: 66px;
+  top: 62px;
   right: 34px;
   width: 3px;
   height: 3px;

@@ -10,8 +10,18 @@ import s from './PhoneShowcase.module.css';
 const PHONE_H = 620;
 const PHONE_W = 300;
 const DEPTH = 18; // phone thickness in px
-const BUMP = 4; // camera plateau height
-const LENS = 3; // how far each lens ring rises above the plateau
+const BUMP = 6; // camera plateau height
+const LENS = 6; // how far each lens ring rises above the plateau
+// Side buttons (px from the top of the phone), placed like a current Pro model:
+// Action + volume on the left edge, power + Camera Control on the right.
+const SIDE_BUTTONS = [
+  { side: 'left', top: 118, h: 30 },
+  { side: 'left', top: 168, h: 52 },
+  { side: 'left', top: 232, h: 52 },
+  { side: 'right', top: 178, h: 70 },
+  { side: 'right', top: 392, h: 64, flush: true },
+] as const;
+const BUTTON_LAYERS = [-3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5];
 const RIM_LAYERS = 18; // stacked rounded slices that fake a rounded metal edge
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -183,6 +193,16 @@ export function PhoneShowcase() {
               {rimLayers.map((z) => (
                 <div key={z} className={s.rim} style={{ transform: `translateZ(${z}px)` }} />
               ))}
+
+              {SIDE_BUTTONS.map((b) =>
+                BUTTON_LAYERS.map((z) => (
+                  <div
+                    key={`${b.side}-${b.top}-${z}`}
+                    className={`${s.sideButton} ${b.side === 'left' ? s.btnLeft : s.btnRight} ${'flush' in b ? s.btnFlush : ''}`}
+                    style={{ top: b.top, height: b.h, transform: `translateZ(${z}px)` }}
+                  />
+                ))
+              )}
 
               <div className={`${s.face} ${s.back}`} style={{ transform: `rotateY(180deg) translateZ(${DEPTH / 2 + 0.5}px)` }}>
                 {/* Lower glass panel, slightly different finish from the frame band. */}
