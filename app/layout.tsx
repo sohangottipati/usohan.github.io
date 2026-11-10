@@ -19,7 +19,7 @@ const instrument = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Sohan Gottipati',
+  title: 'sohan.',
   description: 'Sohan Gottipati — Computer Science with Business Applications student at UC Riverside.',
 };
 
