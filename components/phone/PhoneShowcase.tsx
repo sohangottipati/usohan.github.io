@@ -95,6 +95,17 @@ export function PhoneShowcase() {
       const ty = lerp(70, 0, turn) + Math.sin(t * 1.1) * 6 * idle;
       phone.style.transform = `translateY(${ty}px) scale(${scale}) rotateX(${rotX}deg) rotateY(${rotY}deg) rotateZ(${rotZ}deg)`;
 
+      // Fake specular lighting: a fixed light in front of the phone, so
+      // reflections slide across each surface as it turns.
+      const wrap = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
+      const backOff = wrap(rotY - 180); // 0 when the back faces the viewer
+      const frontOff = wrap(rotY); // 0 when the screen faces the viewer
+      phone.style.setProperty('--gx', `${50 - backOff * 2.6 - rotZ * 1.5}%`);
+      phone.style.setProperty('--fx', `${40 - frontOff * 2.6 - mx * 18}%`);
+      phone.style.setProperty('--gy', `${rotX * 2}%`);
+      phone.style.setProperty('--ang', `${rotY * 1.6}deg`);
+      phone.style.setProperty('--rimx', `${50 + rotY * 0.25}%`);
+
       const wake = seg(cur, 0.58, 0.72);
       if (darkRef.current) darkRef.current.style.opacity = String(1 - wake);
       if (glowRef.current) glowRef.current.style.opacity = String(wake);
@@ -181,6 +192,8 @@ export function PhoneShowcase() {
                   ))}
                   <div className={s.bumpTop} style={{ transform: `translateZ(${BUMP}px)` }}>
                     <div className={s.flash} />
+                    <div className={s.lidar} />
+                    <div className={s.mic} />
                   </div>
                   {[s.l1, s.l2, s.l3].map((pos) => (
                     <div key={pos} className={`${s.lensBarrel} ${pos}`}>
@@ -237,6 +250,7 @@ export function PhoneShowcase() {
 
                   <div className={s.homeBar} />
                   <div ref={darkRef} className={s.screenDark} />
+                  <div className={s.glare} />
                 </div>
               </div>
             </div>
@@ -260,10 +274,46 @@ export function PhoneShowcase() {
   );
 }
 
+const PT_CLOCK = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Los_Angeles',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
+/** Current Pacific time (PST/PDT) as iOS shows it: "9:41", no AM/PM. */
+function usePacificTime() {
+  const [time, setTime] = useState('9:41');
+  useEffect(() => {
+    const tick = () =>
+      setTime(
+        PT_CLOCK.formatToParts(new Date())
+          .filter((p) => p.type === 'hour' || p.type === 'minute' || p.type === 'literal')
+          .map((p) => p.value)
+          .join('')
+          .trim()
+      );
+    tick();
+    // Re-sync on each minute boundary so the clock flips on time.
+    let interval: number | undefined;
+    const timeout = window.setTimeout(() => {
+      tick();
+      interval = window.setInterval(tick, 60_000);
+    }, 60_000 - (Date.now() % 60_000) + 50);
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    };
+  }, []);
+  return time;
+}
+
 function StatusBar() {
+  const time = usePacificTime();
   return (
     <div className={s.statusbar}>
-      <span>9:41</span>
+      <span className={s.time}>{time}</span>
+      <span aria-hidden />
       <span className={s.icons}>
         <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor" aria-hidden>
           <rect x="0" y="7" width="3" height="4" rx="1" />
