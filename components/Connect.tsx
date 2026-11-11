@@ -20,7 +20,7 @@ export function Connect() {
             LinkedIn
           </a>
           <a
-            href="mailto:sohangot@gmail.com"
+            href="mailto:gottipatisohan@gmail.com"
             className="flex items-center gap-2.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-[15px] font-semibold text-[var(--ink)] transition-[transform,border-color] duration-150 ease-out hover:border-[var(--accent)] active:scale-[0.97]">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px] shrink-0">
               <path d="M4 4h16v16H4z" />
