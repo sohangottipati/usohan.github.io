@@ -1,12 +1,12 @@
 // Worker entry: CORS + routing. All state lives in the single Wall Durable Object.
 
-import { allowedOrigins, type Env } from './env';
+import { isOriginAllowed, type Env } from './env';
 
 export { Wall } from './wall';
 
 function corsHeaders(req: Request, env: Env): Record<string, string> {
   const origin = req.headers.get('Origin');
-  if (!origin || allowedOrigins(env).indexOf(origin) < 0) return {};
+  if (!origin || !isOriginAllowed(env, req)) return {};
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Credentials': 'true',

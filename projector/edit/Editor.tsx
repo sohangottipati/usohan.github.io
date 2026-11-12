@@ -29,7 +29,16 @@ export default function Editor() {
   useEffect(() => {
     api('/api/me')
       .then((d) => useEditor.getState().set({ authed: d.authed ? 'yes' : 'no' }))
-      .catch((e) => useEditor.getState().set({ authed: 'no', error: 'Cannot reach the wall API (' + e.message + ')' }));
+      .catch((e) =>
+        useEditor.getState().set({
+          authed: 'no',
+          error:
+            `Cannot reach the wall API at ${apiBase()} (${e.message}).` +
+            (apiBase().indexOf('localhost') >= 0 || apiBase().indexOf('127.0.0.1') >= 0
+              ? ' Is `npm run dev` running in projector/server?'
+              : ''),
+        }),
+      );
   }, []);
 
   return (

@@ -61,7 +61,9 @@ export function readCookie(req: Request, name: string): string | null {
  * (e.g. *.workers.dev during setup). Once the API is on projector-api.sohan.website
  * it is same-site with the editor and every browser sends it.
  */
-export function sessionCookie(value: string, maxAgeSeconds = SESSION_DAYS * 86400): string {
+export function sessionCookie(value: string, maxAgeSeconds = SESSION_DAYS * 86400, local = false): string {
+  // Local dev is plain http: Safari drops Secure cookies there. localhost:3000 → :8787 is same-site, so Lax works.
+  if (local) return `${SESSION_COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
   return `${SESSION_COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${maxAgeSeconds}`;
 }
 

@@ -6,7 +6,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { defaultLiveState, defaultProject, type ClientMessage, type LiveState, type Project, type ServerMessage } from '../../shared/types';
 import { validateProject } from '../../shared/validate';
 import { createSession, isEditor, randomToken, safeEqual, sessionCookie } from './auth';
-import { allowedOrigins, type Env } from './env';
+import { isLocalDev, isOriginAllowed, type Env } from './env';
 
 type Role = 'editor' | 'display';
 
@@ -56,7 +56,7 @@ export class Wall extends DurableObject<Env> {
 
     if (path === '/api/login' && req.method === 'POST') return this.login(req);
     if (path === '/api/logout' && req.method === 'POST') {
-      return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
+      return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0, isLocalDev(this.env)) });
     }
 
     const editor = await isEditor(req, this.env.SESSION_SECRET);
@@ -81,8 +81,7 @@ export class Wall extends DurableObject<Env> {
   }
 
   private originAllowed(req: Request): boolean {
-    const origin = req.headers.get('Origin');
-    return !!origin && allowedOrigins(this.env).indexOf(origin) >= 0;
+    return isOriginAllowed(this.env, req);
   }
 
   private async login(req: Request): Promise<Response> {
@@ -109,7 +108,7 @@ export class Wall extends DurableObject<Env> {
     }
     this.loginFailures = 0;
     const session = await createSession(this.env.SESSION_SECRET);
-    return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(session) });
+    return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(session, undefined, isLocalDev(this.env)) });
   }
 
   // ---------- WebSockets ----------
