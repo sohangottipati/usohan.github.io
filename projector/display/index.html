@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="robots" content="noindex" />
+    <title>wall</title>
+    <style>
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; cursor: none; }
+      #stage { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+      #notice { display: none; position: absolute; left: 50%; top: 50%; width: 80%; margin-left: -40%; text-align: center;
+        color: #888; font: 24px sans-serif; z-index: 200000; transform: translateY(-50%); }
+      #debug { display: none; position: absolute; left: 8px; top: 8px; color: #0f0; background: rgba(0,0,0,.6);
+        font: 14px monospace; padding: 4px 8px; z-index: 200001; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="notice"></div>
+    <div id="debug"></div>
+    <script src="display.js?v=__BUILD__"></script>
+  </body>
+</html>

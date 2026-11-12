@@ -27,3 +27,9 @@ yarn-error.log*
 /.github/agents/
 /.github/hooks/
 /.github/skills/
+
+# projector wall
+/public/projector/display/
+/projector/server/node_modules/
+/projector/server/.wrangler/
+/projector/server/.dev.vars
