@@ -1,0 +1,41 @@
+export interface Env {
+  WALL: DurableObjectNamespace;
+  /** Comma-separated list of origins allowed to call the API with the editor cookie. */
+  ALLOWED_ORIGINS: string;
+  EDITOR_PASSWORD: string;
+  SESSION_SECRET: string;
+  /** Initial display key; can be rotated from the editor afterwards. */
+  DISPLAY_KEY?: string;
+  COMMAND_TOKEN?: string;
+  /** Set to "true" only by `npm run dev` (wrangler dev --var). */
+  LOCAL_DEV?: string;
+}
+
+export function allowedOrigins(env: Env): string[] {
+  return (env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+
+/**
+ * True when running under `npm run dev`. (The request URL can't tell us: wrangler dev
+ * rewrites it to the production route's hostname.)
+ */
+export function isLocalDev(env: Env): boolean {
+  return env.LOCAL_DEV === 'true';
+}
+
+/**
+ * Origins in ALLOWED_ORIGINS are always allowed. During local development
+ * (API on localhost) any localhost origin and port is allowed too, so the
+ * editor works on :3001 or 127.0.0.1. The deployed API never allows them.
+ */
+export function isOriginAllowed(env: Env, req: Request): boolean {
+  const origin = req.headers.get('Origin');
+  if (!origin) return false;
+  if (allowedOrigins(env).indexOf(origin) >= 0) return true;
+  return isLocalDev(env) && LOCAL_ORIGIN.test(origin);
+}

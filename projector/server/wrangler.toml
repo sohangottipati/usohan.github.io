@@ -1,0 +1,23 @@
+name = "projector-wall"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+# Custom domain for the API. Requires sohan.website's DNS to be on Cloudflare
+# (see projector/docs/setup.md). Until then, comment this out and use the
+# *.workers.dev URL with ?api=<url> on the editor/display pages.
+routes = [{ pattern = "projector-api.sohan.website", custom_domain = true }]
+
+[vars]
+ALLOWED_ORIGINS = "https://sohan.website,https://www.sohan.website,http://localhost:3000"
+
+[[durable_objects.bindings]]
+name = "WALL"
+class_name = "Wall"
+
+# SQLite-backed Durable Objects are available on the Workers Free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Wall"]
+
+# Secrets (set with `npx wrangler secret put NAME`, or .dev.vars locally):
+#   EDITOR_PASSWORD, SESSION_SECRET, DISPLAY_KEY
