@@ -19,6 +19,7 @@ import { createSession, isEditor, randomToken, safeEqual, sessionCookie } from '
 import { advanceTimer, runCommand } from './commands/handle';
 import { parseText } from './commands/parseText';
 import { isLocalDev, isOriginAllowed, originOk, type Env } from './env';
+import { Google } from './integrations/google';
 import { Spotify, spotifyChanged } from './integrations/spotify';
 
 type Role = 'editor' | 'display';
@@ -39,6 +40,9 @@ const SPOTIFY_POLL_PLAYING_MS = 3000;
 const SPOTIFY_POLL_IDLE_MS = 10000;
 const SPOTIFY_POLL_QUIET_MS = 30000;
 const SPOTIFY_QUIET_AFTER_MS = 10 * 60 * 1000;
+// Google: to-dos every minute, calendar every 5 minutes, while a screen is connected.
+const TODOS_POLL_MS = 60 * 1000;
+const CALENDAR_POLL_MS = 5 * 60 * 1000;
 
 function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -60,10 +64,14 @@ export class Wall extends DurableObject<Env> {
   private spotify: Spotify;
   private nextSpotifyPoll = Infinity;
   private lastMusicAt = 0;
+  private google: Google;
+  private nextGooglePoll = Infinity;
+  private lastCalendarPoll = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.spotify = new Spotify(env, ctx.storage);
+    this.google = new Google(env, ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
       const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog']);
       const p = stored.get('project');
@@ -102,6 +110,7 @@ export class Wall extends DurableObject<Env> {
 
     // Spotify sends the browser back here after login (no cookie needed: the state value is the proof).
     if (path === '/api/spotify/callback' && req.method === 'GET') return this.spotifyCallback(url);
+    if (path === '/api/google/callback' && req.method === 'GET') return this.googleCallback(url);
     // The spec's direct Spotify routes accept the command token as well as the editor cookie.
     if (path.indexOf('/api/spotify/') === 0 && /^Bearer\s/i.test(req.headers.get('Authorization') || '')) {
       if (!this.bearerOk(req)) {
@@ -141,7 +150,30 @@ export class Wall extends DurableObject<Env> {
     }
     if (path === '/api/commands' && req.method === 'GET') return json({ entries: this.commandLog });
     if (path === '/api/integrations' && req.method === 'GET') {
-      return json({ spotify: await this.spotify.status(), weather: { provider: 'Open-Meteo', configured: true } });
+      return json({ spotify: await this.spotify.status(), google: await this.google.status(), weather: { provider: 'Open-Meteo', configured: true } });
+    }
+    if (path === '/api/google/connect' && req.method === 'POST') {
+      if (!this.google.configured) return json({ ok: false, error: 'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to the server first.' }, 400);
+      const body: any = await req.json().catch(() => ({}));
+      const returnTo = typeof body.returnTo === 'string' ? body.returnTo : '';
+      let origin = '';
+      try {
+        origin = new URL(returnTo).origin;
+      } catch (e) {}
+      if (!originOk(this.env, origin)) return json({ ok: false, error: 'Bad return address' }, 400);
+      return json({ ok: true, url: await this.google.authUrl(returnTo) });
+    }
+    if (path === '/api/google/disconnect' && req.method === 'POST') {
+      await this.google.disconnect();
+      this.nextGooglePoll = Infinity;
+      this.setLive({ calendar: null, todos: null });
+      return json({ ok: true });
+    }
+    if (path === '/api/google/refresh' && req.method === 'POST') {
+      this.lastCalendarPoll = 0;
+      await this.pollGoogle();
+      await this.scheduleAlarm();
+      return json({ ok: true });
     }
     if (path === '/api/spotify/connect' && req.method === 'POST') {
       if (!this.spotify.configured) return json({ ok: false, error: 'Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to the server first.' }, 400);
@@ -214,18 +246,61 @@ export class Wall extends DurableObject<Env> {
       this.nextSpotifyPoll = Date.now();
       await this.scheduleAlarm();
     }
+    return this.oauthReturn('spotify', r);
+  }
+
+  // ---------- Google ----------
+
+  private async googleCallback(url: URL): Promise<Response> {
+    const r = await this.google.callback(url);
+    if (r.ok) {
+      this.lastCalendarPoll = 0;
+      this.nextGooglePoll = Date.now();
+      await this.scheduleAlarm();
+    }
+    return this.oauthReturn('google', r);
+  }
+
+  private async pollGoogle() {
+    const now = Date.now();
+    const wantCalendar = now - this.lastCalendarPoll >= CALENDAR_POLL_MS - 1000;
+    const [todos, calendar] = await Promise.all([this.google.fetchTodos(now), wantCalendar ? this.google.fetchCalendar(now) : Promise.resolve(undefined)]);
+    if (todos === null) {
+      // Not connected (or just got disconnected).
+      this.nextGooglePoll = Infinity;
+      if (this.live.todos || this.live.calendar) this.setLive({ calendar: null, todos: null });
+      return;
+    }
+    const patch: Partial<LiveState> = {};
+    if (!sameExceptTime(this.live.todos, todos)) patch.todos = todos;
+    if (calendar !== undefined) {
+      this.lastCalendarPoll = now;
+      if (!sameExceptTime(this.live.calendar, calendar)) patch.calendar = calendar;
+    }
+    if (Object.keys(patch).length) this.setLive(patch);
+    this.nextGooglePoll = this.ctx.getWebSockets().length ? now + TODOS_POLL_MS : Infinity;
+  }
+
+  private setLive(patch: Partial<LiveState>) {
+    this.live = { ...this.live, ...patch };
+    this.broadcast({ t: 'live', live: this.live, serverTime: Date.now() });
+    this.dirty = true;
+  }
+
+  /** Send the browser back to the editor after an OAuth login, with the result in the query. */
+  private oauthReturn(service: string, r: { returnTo: string; ok: boolean; message: string }): Response {
     let target = '';
     try {
       const u = new URL(r.returnTo);
       if (originOk(this.env, u.origin)) {
-        u.searchParams.set('spotify', r.ok ? 'connected' : 'error');
+        u.searchParams.set(service, r.ok ? 'connected' : 'error');
         u.searchParams.set('message', r.message);
         target = u.toString();
       }
     } catch (e) {}
     if (target) return new Response(null, { status: 302, headers: { Location: target } });
     const msg = r.message.replace(/[<>&]/g, '');
-    return new Response('<!doctype html><meta charset="utf-8"><title>Spotify</title><p style="font:16px sans-serif">' + msg + '</p>', {
+    return new Response('<!doctype html><meta charset="utf-8"><title>' + service + '</title><p style="font:16px sans-serif">' + msg + '</p>', {
       status: r.ok ? 200 : 400,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
@@ -283,6 +358,12 @@ export class Wall extends DurableObject<Env> {
         out = { result: { ok: r.ok, reply: r.reply } };
         // Show what we already know changed; the next poll confirms it.
         if (r.patch && this.live.spotify) out.live = { ...this.live, spotify: { ...this.live.spotify, ...r.patch } };
+      } else if (cmd.type.indexOf('todo.') === 0 || cmd.type.indexOf('calendar.') === 0) {
+        const r = await this.google.control(cmd, this.live, now);
+        out = { result: { ok: r.ok, reply: r.reply } };
+        if (r.todos) out.live = { ...this.live, todos: r.todos };
+        // Confirm against Google shortly (ids, ordering, edits made elsewhere).
+        if (r.ok && cmd.type.indexOf('todo.') === 0 && cmd.type !== 'todo.list') this.nextGooglePoll = now + 1500;
       } else {
         out = runCommand(cmd, { live: this.live, project: this.project, now });
       }
@@ -418,11 +499,14 @@ export class Wall extends DurableObject<Env> {
       role,
     });
     if (role === 'editor') this.sendTo(server, { t: 'commandLog', entries: this.commandLog });
-    // Someone is watching: make sure now-playing is fresh and polling is on.
+    // Someone is watching: make sure integrations are fresh and polling is on.
     if (await this.spotify.connected()) {
       if (this.nextSpotifyPoll > Date.now() + 1000) this.nextSpotifyPoll = Date.now() + 200;
-      await this.scheduleAlarm();
     }
+    if (await this.google.connected()) {
+      if (this.nextGooglePoll > Date.now() + 1000) this.nextGooglePoll = Date.now() + 300;
+    }
+    await this.scheduleAlarm();
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -505,7 +589,7 @@ export class Wall extends DurableObject<Env> {
     if (this.dirty) next = this.lastPersist + PERSIST_INTERVAL_MS;
     const t = this.live.timer;
     if (t && t.status === 'running' && t.pomodoro) next = Math.min(next, t.endsAt);
-    next = Math.min(next, this.nextSpotifyPoll);
+    next = Math.min(next, this.nextSpotifyPoll, this.nextGooglePoll);
     const current = await this.ctx.storage.getAlarm();
     if (next === Infinity) {
       if (current !== null) await this.ctx.storage.deleteAlarm();
@@ -536,7 +620,14 @@ export class Wall extends DurableObject<Env> {
       this.dirty = true;
     }
     if (Date.now() >= this.nextSpotifyPoll - 50) await this.pollSpotify();
+    if (Date.now() >= this.nextGooglePoll - 50) await this.pollGoogle();
     await this.persist();
     await this.scheduleAlarm();
   }
+}
+
+/** Deep-compare two integration states, ignoring when they were fetched. */
+function sameExceptTime(a: any, b: any): boolean {
+  if (!a || !b) return a === b;
+  return JSON.stringify({ ...a, fetchedAt: 0 }) === JSON.stringify({ ...b, fetchedAt: 0 });
 }

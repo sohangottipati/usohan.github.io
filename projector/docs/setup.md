@@ -91,6 +91,5 @@ You can deploy to `projector-wall.<you>.workers.dev` by commenting out `routes` 
 | `COMMAND_TOKEN` (optional) | Bearer token for `/api/command`. If unset, one is generated on first use; see it, copy it and rotate it in the editor's **Commands** panel. See [ios-shortcut.md](ios-shortcut.md). |
 
 | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | From your Spotify developer app. See [spotify.md](spotify.md). |
-| `API_ORIGIN` (var in `wrangler.toml`) | Public address of the API, used for the Spotify redirect URI. |
-
-`GOOGLE_*` arrives with milestone 5.
+| `API_ORIGIN` (var in `wrangler.toml`) | Public address of the API, used for the Spotify and Google redirect URIs. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | From your Google Cloud OAuth client. See [google.md](google.md). |

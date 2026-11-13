@@ -147,11 +147,7 @@ export function runCommand(cmd: Command, st: CommandState): CommandOutcome {
       return ok(`Switched to ${scene.name}.`, { project: { ...project, activeSceneId: scene.id } });
     }
 
-    // ---------- coming in later milestones ----------
-    // (spotify.* commands are run by integrations/spotify.ts, not here.)
-    case 'todo.add':
-    case 'todo.complete':
-      return fail("To-dos aren't set up yet.");
+    // spotify.* runs in integrations/spotify.ts; todo.* and calendar.* in integrations/google.ts.
   }
   return fail(`I don't know the command ${cmd.type}.`);
 }

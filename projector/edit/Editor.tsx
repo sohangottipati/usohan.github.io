@@ -181,14 +181,15 @@ function Workspace() {
 
   useKeyboard();
 
-  // Coming back from Spotify's login page: show the result and the Integrations panel.
+  // Coming back from Spotify's or Google's login page: show the result and the Integrations panel.
   useEffect(() => {
     const q = new URLSearchParams(location.search);
-    const result = q.get('spotify');
-    if (!result) return;
+    const service = q.get('spotify') ? 'spotify' : q.get('google') ? 'google' : '';
+    if (!service) return;
+    const result = q.get(service);
     const message = q.get('message') || '';
-    useEditor.getState().set({ panel: 'integrations', error: result === 'error' ? message || 'Could not connect Spotify.' : null });
-    q.delete('spotify');
+    useEditor.getState().set({ panel: 'integrations', error: result === 'error' ? message || 'Could not connect ' + service + '.' : null });
+    q.delete(service);
     q.delete('message');
     const rest = q.toString();
     history.replaceState(null, '', location.pathname + (rest ? '?' + rest : ''));

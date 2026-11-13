@@ -24,3 +24,4 @@ new_sqlite_classes = ["Wall"]
 # Secrets (set with `npx wrangler secret put NAME`, or .dev.vars locally):
 #   EDITOR_PASSWORD, SESSION_SECRET, DISPLAY_KEY
 #   SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET (see projector/docs/spotify.md)
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (see projector/docs/google.md)
