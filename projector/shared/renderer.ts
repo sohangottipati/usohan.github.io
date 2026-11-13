@@ -9,6 +9,9 @@ import { getWidget, withDefaults } from './widgets/registry';
 import { DEFAULT_THEME, type WidgetInstance } from './widgets/types';
 import { fitText } from './widgets/util';
 
+/** Cross-fade length when the active scene changes. Opacity-only, so cheap on the projector. */
+const SCENE_FADE_MS = 600;
+
 export const HIGHLIGHT_COLORS = ['#ff2d55', '#34c759', '#0a84ff', '#ffd60a', '#bf5af2', '#ff9f0a', '#64d2ff', '#ffffff'];
 
 interface Entry {
@@ -50,6 +53,9 @@ export class SceneRenderer {
   private vw = 0;
   private vh = 0;
   private project: Project | null = null;
+  private sceneId = '';
+  /** Layers fading out after a scene change; destroyed when the fade ends. */
+  private leaving: Entry[] = [];
   private unsub: () => void;
   /** Canvas → container pixels (without master). Exposed for the editor overlay. */
   view: Mat3 = IDENTITY;
@@ -112,18 +118,25 @@ export class SceneRenderer {
     }
 
     const scene = activeScene(project);
+    // Scene change: layers only in the new scene fade in, layers only in the old one fade out.
+    // Shared layers (same id in both) simply stay.
+    const switching = this.sceneId !== '' && this.sceneId !== scene.id;
+    this.sceneId = scene.id;
     const seen: { [id: string]: boolean } = {};
     const cal = live.calibration;
     for (let i = 0; i < scene.layers.length; i++) {
       const layer = scene.layers[i];
       seen[layer.id] = true;
       let e = this.entries[layer.id];
+      const fresh = !e;
       if (!e) e = this.entries[layer.id] = this.createEntry(layer);
       this.syncEntry(e, layer, base, i, cal.highlight, cal.selectedLayerId === layer.id && (cal.highlight || cal.grid));
+      if (fresh && switching) this.fadeIn(e, layer.opacity);
     }
     for (const id in this.entries) {
       if (!seen[id]) {
-        this.destroyEntry(this.entries[id]);
+        if (switching) this.fadeOut(this.entries[id]);
+        else this.destroyEntry(this.entries[id]);
         delete this.entries[id];
       }
     }
@@ -150,7 +163,31 @@ export class SceneRenderer {
     }
   }
 
+  private fadeIn(e: Entry, target: number) {
+    e.el.style.transition = 'none';
+    e.el.style.opacity = '0';
+    void e.el.offsetWidth; // commit the starting opacity before transitioning
+    e.el.style.transition = 'opacity ' + SCENE_FADE_MS + 'ms ease';
+    e.el.style.opacity = '' + target;
+    setTimeout(() => {
+      e.el.style.transition = '';
+    }, SCENE_FADE_MS + 50);
+  }
+
+  private fadeOut(e: Entry) {
+    this.leaving.push(e);
+    e.el.style.transition = 'opacity ' + SCENE_FADE_MS + 'ms ease';
+    e.el.style.opacity = '0';
+    setTimeout(() => {
+      const i = this.leaving.indexOf(e);
+      if (i >= 0) this.leaving.splice(i, 1);
+      this.destroyEntry(e);
+    }, SCENE_FADE_MS + 50);
+  }
+
   destroy() {
+    for (const e of this.leaving) this.destroyEntry(e);
+    this.leaving = [];
     clearTimeout(this.msgTimer);
     this.unsub();
     for (const id in this.entries) this.destroyEntry(this.entries[id]);

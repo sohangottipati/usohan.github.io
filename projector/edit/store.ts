@@ -159,7 +159,26 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (!p) return;
     const scene = activeScene(p);
     const layers = fn(scene.layers);
-    const next: Project = { ...p, scenes: p.scenes.map((s) => (s.id === scene.id ? { ...s, layers } : s)) };
+    // A layer that also appears in other scenes (same id) is shared: carry over
+    // what it looks like and where it sits. Visibility, lock and stacking stay per scene.
+    const changed: { [id: string]: Layer } = {};
+    const before: { [id: string]: Layer } = {};
+    for (const l of scene.layers) before[l.id] = l;
+    for (const l of layers) if (before[l.id] && before[l.id] !== l) changed[l.id] = l;
+    const next: Project = {
+      ...p,
+      scenes: p.scenes.map((s) => {
+        if (s.id === scene.id) return { ...s, layers };
+        let touched = false;
+        const others = s.layers.map((l) => {
+          const c = changed[l.id];
+          if (!c) return l;
+          touched = true;
+          return { ...l, ...sharedFields(c) };
+        });
+        return touched ? { ...s, layers: others } : s;
+      }),
+    };
     get().commit(next, opts);
   },
 
@@ -175,4 +194,23 @@ export function selectedLayer(s: { project: Project | null; selectedId: string |
 
 export function newId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+/** The parts of a layer that linked copies in other scenes share. */
+export function sharedFields(l: Layer): Partial<Layer> {
+  return {
+    name: l.name,
+    widget: l.widget,
+    settings: l.settings,
+    quad: l.quad,
+    contentSize: l.contentSize,
+    opacity: l.opacity,
+    ratioLock: l.ratioLock,
+  };
+}
+
+/** Names of the other scenes this layer also appears in. */
+export function linkedScenes(p: Project, layerId: string): string[] {
+  const cur = activeScene(p).id;
+  return p.scenes.filter((s) => s.id !== cur && s.layers.some((l) => l.id === layerId)).map((s) => s.name);
 }

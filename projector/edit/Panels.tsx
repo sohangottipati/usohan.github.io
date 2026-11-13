@@ -5,7 +5,8 @@ import { rectQuad, activeScene, type Layer, type Project } from '../shared/types
 import { getWidget, listWidgets, withDefaults } from '../shared/widgets/registry';
 import { cloneQuad, moveQuad } from './geometry';
 import SettingsForm from './SettingsForm';
-import { newId, selectedLayer, useEditor } from './store';
+import { linkedScenes, newId, selectedLayer, useEditor } from './store';
+import { addLayerToScene, deleteLayerEverywhere, ScenesSection, unlinkLayer } from './Scenes';
 import css from './editor.module.css';
 
 // ---------- layer operations ----------
@@ -56,8 +57,55 @@ export function duplicateLayer(id: string) {
 
 export function deleteLayer(id: string) {
   const st = useEditor.getState();
+  const others = st.project ? linkedScenes(st.project, id) : [];
+  if (others.length) {
+    // Shared layer: ask whether it goes from this scene only, or everywhere.
+    const everywhere = confirm(
+      'This layer is also in ' + others.join(', ') + '.\n\nOK: delete it from every scene.\nCancel: remove it from this scene only.',
+    );
+    if (everywhere) {
+      deleteLayerEverywhere(id);
+      return;
+    }
+  }
   st.updateLayers((layers) => layers.filter((l) => l.id !== id));
   st.select(null);
+}
+
+/** Share the selected layer with other scenes, or unshare it. */
+function SceneLinks({ layerId }: { layerId: string }) {
+  const project = useEditor((s) => s.project);
+  if (!project || project.scenes.length < 2) return null;
+  const others = linkedScenes(project, layerId);
+  const addable = project.scenes.filter((s) => s.id !== project.activeSceneId && !s.layers.some((l) => l.id === layerId));
+  return (
+    <div className={css.sceneLinks}>
+      {others.length > 0 && (
+        <p className={css.help}>
+          Shared with <b>{others.join(', ')}</b>: moving or editing it changes it there too.{' '}
+          <button className={css.inlineBtn} onClick={() => unlinkLayer(layerId)} title="Give this scene its own copy">
+            Unlink
+          </button>
+        </p>
+      )}
+      {addable.length > 0 && (
+        <select
+          className={css.input}
+          value=""
+          onChange={(e) => {
+            if (e.target.value) addLayerToScene(layerId, e.target.value);
+          }}
+        >
+          <option value="">Also show in scene…</option>
+          {addable.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
 }
 
 /** delta: +1 up, -1 down, 'front', 'back'. Index 0 is the bottom of the stack. */
@@ -87,6 +135,7 @@ export function LayerPanel() {
 
   return (
     <aside className={css.left}>
+      <ScenesSection />
       <section className={css.section}>
         <h3 className={css.h3}>Add layer</h3>
         <div className={css.addGrid}>
@@ -167,6 +216,7 @@ export function LayerPanel() {
             <button className={css.danger} onClick={() => deleteLayer(selectedId)} title="Delete">Delete</button>
           </div>
         )}
+        {selectedId && <SceneLinks layerId={selectedId} />}
       </section>
     </aside>
   );
@@ -210,6 +260,11 @@ export function PropertiesPanel({ displayKey, onRotateKey }: { displayKey: strin
     <aside className={css.right}>
       <section className={css.section}>
         <h3 className={css.h3}>Layer</h3>
+        {linkedScenes(project, layer.id).length > 0 && (
+          <p className={css.help} style={{ marginTop: -4, marginBottom: 8 }}>
+            Shared with {linkedScenes(project, layer.id).join(', ')}
+          </p>
+        )}
         <label className={css.field}>
           <span className={css.fieldLabel}>Name</span>
           <input className={css.input} value={layer.name} onChange={(e) => set({ name: e.target.value }, 'name')} />

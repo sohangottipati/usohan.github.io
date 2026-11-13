@@ -33,10 +33,19 @@ export function validateProject(p: any): string | null {
   if (!isQuad(p.masterQuad)) return 'Invalid master quad';
   if (!Array.isArray(p.scenes) || p.scenes.length === 0 || p.scenes.length > 50) return 'Invalid scenes';
   let found = false;
+  const sceneIds: { [id: string]: boolean } = {};
   for (const s of p.scenes) {
     if (!s || typeof s.id !== 'string' || typeof s.name !== 'string' || !Array.isArray(s.layers)) return 'Invalid scene';
+    if (sceneIds[s.id]) return 'Two scenes share the id ' + s.id;
+    sceneIds[s.id] = true;
     if (s.layers.length > 200) return 'Too many layers';
-    for (const l of s.layers) if (!isLayer(l)) return 'Invalid layer in scene ' + s.name;
+    // The same layer id may appear in several scenes (a shared layer), but only once per scene.
+    const layerIds: { [id: string]: boolean } = {};
+    for (const l of s.layers) {
+      if (!isLayer(l)) return 'Invalid layer in scene ' + s.name;
+      if (layerIds[l.id]) return 'Scene ' + s.name + ' has the same layer twice';
+      layerIds[l.id] = true;
+    }
     if (s.id === p.activeSceneId) found = true;
   }
   if (!found) return 'activeSceneId does not match a scene';
