@@ -4,10 +4,21 @@
 import type { WidgetDefinition } from './types';
 import { clockWidget } from './clock';
 import { mediaWidget } from './media';
+import { particlesWidget } from './particles';
 import { shapeWidget } from './shape';
+import { sunArcWidget } from './sunArc';
 import { textWidget } from './text';
+import { weatherWidget } from './weather';
 
-const ALL: WidgetDefinition<any>[] = [shapeWidget, mediaWidget, textWidget, clockWidget];
+const ALL: WidgetDefinition<any>[] = [
+  shapeWidget,
+  mediaWidget,
+  textWidget,
+  clockWidget,
+  particlesWidget,
+  sunArcWidget,
+  weatherWidget,
+];
 
 const byType: { [type: string]: WidgetDefinition<any> } = {};
 for (let i = 0; i < ALL.length; i++) byType[ALL[i].type] = ALL[i];
