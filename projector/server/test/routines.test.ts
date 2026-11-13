@@ -1,5 +1,5 @@
 // Run with `npm test` in projector/server.
-import { isClassEvent, starterRoutines } from '../../shared/jarvis';
+import { classKind, isClassEvent, starterRoutines } from '../../shared/jarvis';
 import { findRoutine, matchRoutine, planRoutine, sanitizeRoutines } from '../src/jarvis/routines';
 
 let failed = 0;
@@ -32,6 +32,13 @@ eq('class by calendar', isClassEvent({ title: 'Lecture', calendar: 'UCR School',
 eq('class by course code', isClassEvent({ title: 'CS 100 lecture', calendar: 'me', allDay: false }, cm), true);
 eq('class code no space', isClassEvent({ title: 'MATH10A', calendar: 'me', allDay: false }, cm), true);
 eq('not a class', isClassEvent({ title: 'Dinner with Alex', calendar: 'me', allDay: false }, cm), false);
+eq('meeting is not a class', isClassEvent({ title: 'CS 100 project meeting', calendar: 'UCR School', allDay: false }, cm), false);
+eq('office hours not a class', isClassEvent({ title: 'CS 100 Office Hours', calendar: 'me', allDay: false }, cm), false);
+eq('standup not a class', isClassEvent({ title: 'Standup', calendar: 'me', allDay: false }, cm), false);
+eq('lab by keyword', classKind({ title: 'Physics Lab', calendar: 'me', allDay: false }, cm), 'lab');
+eq('discussion abbrev', classKind({ title: 'CS 100 DIS 021', calendar: 'me', allDay: false }, cm), 'discussion');
+eq('lecture abbrev', classKind({ title: 'MATH 10A - LEC 001', calendar: 'me', allDay: false }, cm), 'lecture');
+eq('midterm not a class', isClassEvent({ title: 'CS 100 Midterm', calendar: 'me', allDay: false }, cm), false);
 eq('all-day never', isClassEvent({ title: 'CS 100 exam week', calendar: 'School', allDay: true }, cm), false);
 
 if (failed) {

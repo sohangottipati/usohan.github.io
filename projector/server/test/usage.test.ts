@@ -42,7 +42,7 @@ live.calendar = {
 };
 ctx = buildContext(live, project, now, 'America/Los_Angeles', [], { ...s.classMode, enabled: true });
 ok(/couldn't load \(Canvas answered 403\.\)/.test(ctx), 'canvas error is stated');
-ok(/CS 100 Lecture \[class\]/.test(ctx), 'class events are marked');
+ok(/CS 100 Lecture \[class: lecture\]/.test(ctx), 'class events are marked');
 
 if (failed) {
   console.log(failed + ' failed');

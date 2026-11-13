@@ -2,6 +2,7 @@
 // and the Cloudflare Worker. Keep this file dependency-free.
 
 import type { AiUsage } from './usage';
+import type { StudyState } from './planner';
 
 export type Point = [number, number];
 /** Corners in display (canvas) pixels: top-left, top-right, bottom-right, bottom-left. */
@@ -81,6 +82,10 @@ export interface MessageState {
   text: string;
   /** Server epoch ms when it disappears. */
   until: number;
+  /** 'reply': an answer to a Siri/API request, shown as a smaller card with the question. */
+  kind?: 'say' | 'reply';
+  /** For replies: what was asked. */
+  from?: string;
 }
 
 export interface SpotifyTrack {
@@ -209,6 +214,8 @@ export interface LiveState {
   classNext?: ClassNow | null;
   /** What Jarvis's AI has used today and this month (see usage.ts). */
   aiUsage?: AiUsage | null;
+  /** Work sessions and study time (see planner.ts). */
+  study?: StudyState | null;
   [key: string]: any;
 }
 

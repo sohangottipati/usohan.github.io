@@ -215,6 +215,53 @@ const RULES: Rule[] = [
       return ms ? { type: 'timer.add', payload: { minutes: ms / 60000 } } : null;
     },
   },
+  // ----- getting work done (before timers: "start working on HW 3 for 45 minutes" is a session, not a plain timer) -----
+  {
+    example: 'what should I work on',
+    test: /^(what should i (work on|do|start( on| with)?|focus on|tackle)|what do i (work on|do|start|focus on|tackle) (now|next|first)|what('s| is) (the )?(most (important|urgent)|priority|top priority)|help me (prioritize|plan my (day|afternoon|evening|night))|prioritize|what('s| is) my (next|top) (task|priority|assignment)|where should i start)\b/,
+    build: () => ({ type: 'work.next' }),
+  },
+  {
+    example: 'start working on HW 3 for 45 minutes',
+    test: /^(?:let'?s |i'?m going to |time to |going to |i want to )?(?:start |begin |get )?(?:(?:working|work|studying|focusing|focus) on|(?:a )?(?:work|study|focus) session (?:on|for)|lock in on)\s+(.+)$|^(?:let'?s |time to )?(?:start working|start studying|get to work|start a (?:work|study|focus) session|lock in|let'?s work|let'?s study)(?:\s+for\s+(.+))?$/,
+    build: (t, original, m) => {
+      let text = (m[1] || '').trim();
+      let minutes: number | undefined;
+      const tailFor = /\s+for\s+(.+)$/.exec(text);
+      if (tailFor && parseDuration(tailFor[1])) {
+        minutes = parseDuration(tailFor[1])! / 60000;
+        text = text.slice(0, tailFor.index).trim();
+      } else if (m[2] && parseDuration(m[2])) minutes = parseDuration(m[2])! / 60000;
+      text = text.replace(/^(the|my)\s+/, '');
+      const payload: Record<string, any> = {};
+      if (text) payload.text = text;
+      if (minutes) payload.minutes = minutes;
+      return { type: 'focus.start', payload };
+    },
+  },
+  {
+    example: "I'm done",
+    test: /^(?:i'?m (?:done|finished)|i am (?:done|finished)|done|finished|stop (?:working|studying)|end (?:the |my )?(?:work|study|focus) session|that'?s it for now)(?:\s+(?:with|for)\s+(.+))?$|^(?:i\s+)?(?:did|done with|finished|completed)\s+(.+)$/,
+    build: (_t, _o, m) => {
+      const text = (m[1] || m[2] || '').replace(/^(the|my)\s+/, '').trim();
+      return text ? { type: 'focus.done', payload: { text } } : { type: 'focus.done' };
+    },
+  },
+  {
+    example: 'how much did I study today',
+    test: /^how (?:much|long) (?:did|have|has) i (?:studied|study|worked|work|focused|focus|been (?:studying|working))|^how much (?:studying|work|focus time) (?:did|have) i\b|^(?:my )?(?:study|focus) (?:time|stats)\b/,
+    build: (t) => ({ type: 'focus.stats', payload: { period: /week/.test(t) ? 'week' : 'today' } }),
+  },
+  {
+    example: 'when am I free',
+    test: /^(?:when am i free|when('s| is) my next (?:free|open) (?:time|block|slot)|do i have (?:any )?free time|(?:any )?free time|when can i (?:study|work|do (?:my )?homework)|how much free time)/,
+    build: (t) => ({ type: 'calendar.free', payload: { day: /tomorrow/.test(t) ? 'tomorrow' : 'today' } }),
+  },
+  {
+    example: 'break down HW 3',
+    test: /^(?:break down|break up|split up|chunk|plan out|make a plan for|help me (?:start|plan|break down))\s+(?:the |my )?(.+?)(?:\s+into\s+(?:small(?:er)? )?(?:steps|tasks|parts|pieces))?$/,
+    build: (_t, _o, m) => ({ type: 'todo.breakdown', payload: { text: m[1].trim() } }),
+  },
   // ----- messages (before timers: "show X for 30 seconds" is not a timer) -----
   {
     example: 'say dinner is ready',
@@ -299,9 +346,9 @@ const RULES: Rule[] = [
   },
   {
     example: 'complete buy milk',
-    test: /^(?:complete|finish(?:ed)?|check off|cross off|tick off|mark)\s+(.+?)(?:\s+(?:as\s+)?(?:done|complete|completed))?$|^(?:i\s+)?(?:did|done with|finished)\s+(.+)$/,
+    test: /^(?:complete|finish(?:ed)?|check off|cross off|tick off|mark)\s+(.+?)(?:\s+(?:as\s+)?(?:done|complete|completed))?$/,
     build: (_t, _o, m) => {
-      const text = (m[1] || m[2] || '').replace(/^(the|my)\s+/, '').trim();
+      const text = (m[1] || '').replace(/^(the|my)\s+/, '').trim();
       return text ? { type: 'todo.complete', payload: { text } } : null;
     },
   },

@@ -194,6 +194,10 @@ export default function JarvisPanel() {
           <input type="checkbox" checked={draft.captions} onChange={(e) => set({ captions: e.target.checked })} />
           <span>Also show what {draft.name} says on the wall</span>
         </label>
+        <label className={css.checkRow}>
+          <input type="checkbox" checked={draft.showReplies} onChange={(e) => set({ showReplies: e.target.checked })} />
+          <span>Show Siri questions and replies on the wall</span>
+        </label>
         <div className={css.row}>
           <button onClick={testVoice} disabled={!!busy}>
             {busy === 'voice' && showBusy ? 'Speaking…' : 'Test voice'}
@@ -223,7 +227,44 @@ export default function JarvisPanel() {
       </section>
 
       <section className={css.section}>
+        <h3 className={css.h3}>Work sessions</h3>
+        <p className={css.help} style={{ marginTop: 0 }}>
+          Say &quot;what should I work on&quot;, &quot;start working on HW 3&quot;, &quot;I&apos;m done&quot;, &quot;when am I free&quot;, &quot;how much did I study today&quot; or
+          &quot;break down HW 3&quot;. Sessions are timed and logged for the Study time layer.
+        </p>
+        <label className={css.checkRow}>
+          <span>Daily study goal</span>
+          <input
+            className={css.input}
+            style={{ width: 64, flex: 'none' }}
+            type="number"
+            min={0}
+            max={960}
+            step={15}
+            value={draft.studyGoalMinutes}
+            onChange={(e) => set({ studyGoalMinutes: +e.target.value })}
+          />
+          <span>minutes</span>
+        </label>
+        <label className={css.field}>
+          <span className={css.fieldLabel}>Switch to a scene when a session starts</span>
+          <select className={css.input} value={draft.focusScene} onChange={(e) => set({ focusScene: e.target.value })}>
+            <option value="">Don&apos;t switch</option>
+            {scenes.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      <section className={css.section}>
         <h3 className={css.h3}>Class mode</h3>
+        <p className={css.help} style={{ marginTop: 0 }}>
+          Classes are lectures, labs and discussions (&quot;LEC&quot;, &quot;LAB&quot;, &quot;DIS&quot; count too). Meetings, office hours and exams never do, even with a course
+          name in them.
+        </p>
         <label className={css.checkRow}>
           <input type="checkbox" checked={draft.classMode.enabled} onChange={(e) => set({ classMode: { ...draft.classMode, enabled: e.target.checked } })} />
           <span>When a class starts on my calendar…</span>
@@ -257,7 +298,7 @@ export default function JarvisPanel() {
             </label>
             <label className={css.checkRow}>
               <input type="checkbox" checked={draft.classMode.courseCodes} onChange={(e) => set({ classMode: { ...draft.classMode, courseCodes: e.target.checked } })} />
-              <span>Also count events named like a course (&quot;CS 100&quot;, &quot;MATH 10A&quot;)</span>
+              <span>Also count events that are just a course name (&quot;CS 100&quot;, &quot;MATH 10A&quot;)</span>
             </label>
             <p className={css.help}>Add a <b>Class</b> layer to show the class, time left, and the next one.</p>
           </>

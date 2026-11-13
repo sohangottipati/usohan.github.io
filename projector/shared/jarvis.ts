@@ -80,6 +80,8 @@ export interface JarvisSettings {
   voiceModel: string;
   /** Also show spoken replies / announcements as text on the wall. */
   captions: boolean;
+  /** Show Siri/API requests and their replies on the wall. */
+  showReplies: boolean;
   briefing: boolean;
   /** "07:30", local to timeZone. */
   briefingTime: string;
@@ -93,6 +95,9 @@ export interface JarvisSettings {
   announceDeadlines: boolean;
   deadlineLeadHours: number;
   classMode: ClassModeSettings;
+  /** Work sessions ("start working on HW 3"): daily study goal, and a scene to switch to (optional). */
+  studyGoalMinutes: number;
+  focusScene: string;
 }
 
 export interface ClassModeSettings {
@@ -107,15 +112,37 @@ export interface ClassModeSettings {
   quiet: boolean;
 }
 
-/** Does this calendar event look like a class? */
-export function isClassEvent(e: { title: string; calendar: string; allDay: boolean }, c: ClassModeSettings): boolean {
-  if (e.allDay) return false;
+export type ClassKind = 'lecture' | 'lab' | 'discussion' | 'class';
+
+// Meetings and everything else that happens to mention a course ("CS 100 office
+// hours", "lab meeting", "CS 100 study group") are not classes.
+const NOT_CLASS = /\b(meeting|meetings|mtg|standup|stand-up|sync|1:1|1-on-1|one on one|interview|call|office hours?|club|practice|shift|appointment|appt|coffee|lunch|dinner|party|birthday|gym|workout|study group|tutoring session|review session|exam|midterm|final|quiz|due|deadline)\b/i;
+const KINDS: [ClassKind, RegExp][] = [
+  ['lab', /\b(lab|labs|laboratory)\b/i],
+  ['discussion', /\b(dis|disc|discussion|discussions|recitation|section|sect)\b/i],
+  ['lecture', /\b(lec|lect|lecture|lectures)\b/i],
+  ['class', /\b(seminar|studio|tutorial|class)\b/i],
+];
+const COURSE_CODE = /\b[A-Z]{2,5}\s?\d{1,3}[A-Z]{0,2}\b/;
+
+/**
+ * Is this calendar event a class (a lecture, lab or discussion), and which kind?
+ * Meetings, office hours, exams and all-day events never are.
+ */
+export function classKind(e: { title: string; calendar: string; allDay: boolean }, c: ClassModeSettings): ClassKind | null {
+  if (e.allDay || NOT_CLASS.test(e.title)) return null;
+  for (const [kind, re] of KINDS) if (re.test(e.title)) return kind;
   const cals = c.calendars
     .split(',')
     .map((x) => x.trim().toLowerCase())
     .filter(Boolean);
-  if (cals.length && cals.some((x) => e.calendar.toLowerCase().indexOf(x) >= 0)) return true;
-  return c.courseCodes && /\b[A-Z]{2,5}\s?\d{1,3}[A-Z]{0,2}\b/.test(e.title);
+  if (cals.length && cals.some((x) => e.calendar.toLowerCase().indexOf(x) >= 0)) return 'class';
+  return c.courseCodes && COURSE_CODE.test(e.title) ? 'class' : null;
+}
+
+/** Does this calendar event look like a class? */
+export function isClassEvent(e: { title: string; calendar: string; allDay: boolean }, c: ClassModeSettings): boolean {
+  return classKind(e, c) !== null;
 }
 
 export const WORKERS_MODELS = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct-fast'];
@@ -133,6 +160,7 @@ export function defaultJarvisSettings(): JarvisSettings {
     voice: 'announcements',
     voiceModel: '@cf/myshell-ai/melotts',
     captions: false,
+    showReplies: true,
     briefing: false,
     briefingTime: '07:30',
     timeZone: 'America/Los_Angeles',
@@ -143,6 +171,8 @@ export function defaultJarvisSettings(): JarvisSettings {
     announceDeadlines: true,
     deadlineLeadHours: 3,
     classMode: { enabled: false, calendars: '', courseCodes: true, scene: '', quiet: true },
+    studyGoalMinutes: 120,
+    focusScene: '',
   };
 }
 
@@ -165,6 +195,7 @@ export function sanitizeJarvisSettings(input: any): JarvisSettings {
     voice: ['off', 'announcements', 'all'].indexOf(s.voice) >= 0 ? s.voice : d.voice,
     voiceModel: str(s.voiceModel, d.voiceModel, 120),
     captions: bool(s.captions, d.captions),
+    showReplies: bool(s.showReplies, d.showReplies),
     briefing: bool(s.briefing, d.briefing),
     briefingTime: /^([01]?\d|2[0-3]):[0-5]\d$/.test(s.briefingTime) ? s.briefingTime : d.briefingTime,
     timeZone: isTimeZone(s.timeZone) ? s.timeZone : d.timeZone,
@@ -184,6 +215,8 @@ export function sanitizeJarvisSettings(input: any): JarvisSettings {
         quiet: bool(c.quiet, d.classMode.quiet),
       };
     })(),
+    studyGoalMinutes: num(s.studyGoalMinutes, d.studyGoalMinutes, 0, 960),
+    focusScene: typeof s.focusScene === 'string' ? s.focusScene.slice(0, 60) : '',
   };
 }
 

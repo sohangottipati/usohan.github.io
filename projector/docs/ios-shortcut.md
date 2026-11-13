@@ -50,6 +50,7 @@ Duplicate the shortcut, delete **Dictate Text**, and set the `text` field to fix
 | add dentist next tuesday at 3 · undo that | Add calendar events (see [google.md](google.md)) |
 | check my email · any new emails? | Gmail summary (optional) |
 | what's due this week · any homework due tomorrow | Canvas (see [canvas.md](canvas.md)) |
+| what should I work on · start working on HW 3 · I'm done · when am I free · how much did I study today · break down HW 3 | Getting work done (see [jarvis.md](jarvis.md#getting-work-done)) |
 | goodnight · I'm home · run *routine name* · cancel the routine | Routines you set up in editor → Jarvis (see [jarvis.md](jarvis.md#routines)) |
 
 "Wall", "Hey Siri", "please" and punctuation are ignored, and numbers can be digits or words. With **Jarvis** turned on (editor → Jarvis), you can also say things any way you like, ask questions, or chain requests. See [jarvis.md](jarvis.md). The phrases live in [`projector/server/src/commands/parseText.ts`](../server/src/commands/parseText.ts); add a rule there to teach it new ones.

@@ -88,9 +88,42 @@ Steps come in three kinds:
 
 "Do" steps use the built-in phrase parser, not the brain, so they're instant, free and predictable. Run one by saying any of its phrases ("Hey Siri, Wall… goodnight", "run goodnight") or with **Run now** after saving. Say **"cancel the routine"** to drop steps that are still waiting. With a brain on, you can also ask loosely ("I'm heading to bed"). Limits: 20 routines, 15 steps each.
 
+## Getting work done
+
+These phrases work with the brain off (instant and free) as well as on:
+
+| Say | What happens |
+| --- | --- |
+| what should I work on · help me prioritize | Ranks your work and names the top items. Missing Canvas work comes first, then whatever is due soonest (Canvas or to-dos). It also says how much free time you have before your next event. |
+| start working on HW 3 · focus on my essay for an hour · start working | Starts a timed work session and logs the time. With no task named, it picks the most urgent one. With no length given, it fills your free time before the next event (up to 50 minutes, or 25 if there's little time). It can switch to a scene you pick. |
+| I'm done · done with HW 3 | Ends the session and logs it. If the task is a to-do, it gets checked off; if it's Canvas work, Jarvis reminds you to submit it. Then it tells you what's next. |
+| when am I free (tomorrow) | Lists the gaps of 20 minutes or more between events, from 8 AM to 11 PM. |
+| how much did I study today / this week | Totals by task, and how far you are from your daily goal. |
+| break down HW 3 | Splits the task into 3–5 small steps and adds them to Google Tasks, due the day the work is due. Needs the brain on. |
+
+When a session's timer runs out, Jarvis says "Time's up on HW 3. That was 50 minutes…" and logs it.
+
+Set the daily goal and the session scene in editor → **Jarvis → Work sessions**.
+
+Three layers go with this:
+
+- **Up next:** the top item, your free time, and the next couple of items. During a session it shows what you're working on.
+- **Study time:** today's minutes against your goal, the last 7 days as bars, and what the time went to.
+- **AI usage:** see below.
+
+## Siri replies on the wall
+
+When you ask through Siri, your question and the answer pop up in the lower part of the wall for 6–25 seconds, depending on length. A request that puts up its own message, like "say dinner is ready", shows just that message. Turn this off in **Jarvis → Voice → Show Siri questions and replies on the wall**.
+
 ## Class mode
 
-Turn on **Class mode** in the panel. An event counts as a class when it's on one of the calendars you list (e.g. `UCR`), or when its title looks like a course code ("CS 100", "MATH 10A"). All-day events never count.
+Turn on **Class mode** in the panel. A class is a lecture, lab or discussion. An event counts when any of these is true:
+
+- its title says so: "Lecture", "Lab" or "Discussion", or the abbreviations LEC, LAB, DIS (Section, Recitation, Seminar and Studio count too)
+- it's on one of the calendars you list (e.g. `UCR`)
+- its title is just a course code ("CS 100", "MATH 10A")
+
+Meetings never count, and neither do office hours, study groups, exams or all-day events, even with a course name in them. Jarvis uses the same rule when you ask about "my classes".
 
 When a class starts:
 

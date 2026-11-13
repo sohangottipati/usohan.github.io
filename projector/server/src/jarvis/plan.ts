@@ -13,6 +13,12 @@ const MAX_COMMANDS = 6;
 
 /** Every command type the brain may use. Integrations' commands are included; they fail politely if not connected. */
 export const BRAIN_COMMANDS = [
+  'work.next',
+  'focus.start',
+  'focus.done',
+  'focus.stats',
+  'calendar.free',
+  'todo.breakdown',
   'timer.start',
   'timer.pause',
   'timer.reset',

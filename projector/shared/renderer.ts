@@ -363,8 +363,27 @@ export class SceneRenderer {
     if (key !== this.msgKey) {
       const wasShowing = !!this.msgKey;
       this.msgKey = key;
-      this.msgSpan.textContent = m.text;
-      fitText(this.msgText, ch / 6);
+      const reply = m.kind === 'reply';
+      // "Say" messages: big and centered. Replies to Siri: a smaller card in the
+      // lower part of the wall, with the question above the answer.
+      this.msgText.style.left = reply ? '8%' : '10%';
+      this.msgText.style.width = reply ? '84%' : '80%';
+      this.msgText.style.top = reply ? '52%' : '25%';
+      this.msgText.style.height = reply ? '42%' : '50%';
+      this.msgText.style.textAlign = reply ? 'left' : 'center';
+      this.msgText.style.fontWeight = reply ? '500' : '600';
+      this.msgText.style.lineHeight = reply ? '1.25' : '1.1';
+      this.msgSpan.textContent = '';
+      if (reply && m.from) {
+        const q = document.createElement('div');
+        q.style.cssText = 'font-size:.55em;opacity:.6;margin-bottom:.35em;font-weight:400';
+        q.textContent = '“' + m.from + '”';
+        this.msgSpan.appendChild(q);
+      }
+      const a = document.createElement('div');
+      a.textContent = m.text;
+      this.msgSpan.appendChild(a);
+      fitText(this.msgText, reply ? ch / 14 : ch / 6);
       if (!wasShowing) {
         // Toast entrance: rise 16px and fade in on the ease-out curve.
         this.msgText.style.transition = 'none';

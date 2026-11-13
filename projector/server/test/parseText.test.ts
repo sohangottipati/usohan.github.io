@@ -88,6 +88,30 @@ check('any homework due tomorrow', { type: 'canvas.due', payload: { days: 2 } })
 
 check('cancel the routine', { type: 'routine.cancel' });
 
+// getting work done
+check('what should I work on', { type: 'work.next' });
+check('what should i do now', { type: 'work.next' });
+check("what's most important right now", { type: 'work.next' });
+check('help me prioritize', { type: 'work.next' });
+check('start working on HW 3', { type: 'focus.start', payload: { text: 'hw 3' } });
+check('start working on hw 3 for 45 minutes', { type: 'focus.start', payload: { text: 'hw 3', minutes: 45 } });
+check("let's work on the physics lab report", { type: 'focus.start', payload: { text: 'physics lab report' } });
+check('focus on my essay for an hour', { type: 'focus.start', payload: { text: 'essay', minutes: 60 } });
+check('start working', { type: 'focus.start', payload: {} });
+check('lock in for 30 minutes', { type: 'focus.start', payload: { minutes: 30 } });
+check("I'm done", { type: 'focus.done' });
+check('done with hw 3', { type: 'focus.done', payload: { text: 'hw 3' } });
+check('I finished the essay', { type: 'focus.done', payload: { text: 'essay' } });
+check('stop working', { type: 'focus.done' });
+check('how much did I study today', { type: 'focus.stats', payload: { period: 'today' } });
+check('how long have I worked this week', { type: 'focus.stats', payload: { period: 'week' } });
+check('when am I free', { type: 'calendar.free', payload: { day: 'today' } });
+check('when am i free tomorrow', { type: 'calendar.free', payload: { day: 'tomorrow' } });
+check('when can I study', { type: 'calendar.free', payload: { day: 'today' } });
+check('break down HW 3 into steps', { type: 'todo.breakdown', payload: { text: 'hw 3' } });
+check('focus mode', { type: 'scene.set', payload: { name: 'focus' } });
+check('focus timer 25 minutes', { type: 'timer.start', payload: { minutes: 25, label: 'Focus' } });
+
 // spotify
 check('skip the song', { type: 'spotify.next' });
 check('skip', { type: 'spotify.next' });

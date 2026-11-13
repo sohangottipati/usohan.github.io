@@ -17,6 +17,7 @@ import {
 import { validateProject } from '../../shared/validate';
 import { createSession, isEditor, randomToken, safeEqual, sessionCookie } from './auth';
 import { advanceTimer, runCommand } from './commands/handle';
+import { timerRemaining } from '../../shared/types';
 import { parseTextDetailed } from './commands/parseText';
 import { defaultJarvisSettings, isClassEvent, sanitizeJarvisSettings, type JarvisSettings, type MemoryFact, type Routine } from '../../shared/jarvis';
 import { findRoutine, matchRoutine, planRoutine, sanitizeRoutines, type ScheduledStep } from './jarvis/routines';
@@ -31,6 +32,8 @@ import type { Exchange } from './jarvis/prompt';
 import { localDate, nextDailyTime } from './jarvis/time';
 import { synthesize } from './jarvis/voice';
 import { recordUsage, type UsageEvent } from '../../shared/usage';
+import { freeWindow, matchWork, speakMinutes, summarizeStudy, workItems, type FocusSession, type StudyEntry } from '../../shared/planner';
+import { dayFns, freeTime, prevDay, studyStats, whatNext, whenDue } from './jarvis/work';
 import { isLocalDev, isOriginAllowed, originOk, type Env } from './env';
 import { Google } from './integrations/google';
 import { Spotify, spotifyChanged } from './integrations/spotify';
@@ -102,6 +105,11 @@ export class Wall extends DurableObject<Env> {
   private routines: Routine[] = [];
   /** Routine steps waiting for their time ("…wait 10 minutes, then blackout"). */
   private pendingSteps: ScheduledStep[] = [];
+  /** Work sessions: the one running now, and the log of finished ones (last 600). */
+  private focus: FocusSession | null = null;
+  private studyLog: StudyEntry[] = [];
+  /** The session that just ended when its timer ran out, for the "time's up" line. */
+  private justLogged: { label: string; minutes: number } | null = null;
   private announcedDeadlines: string[] = [];
   /** The class class mode is handling, and the scene to go back to afterwards. */
   private classState: { id: string; prevSceneId: string | null; switchedTo: string | null } | null = null;
@@ -112,7 +120,10 @@ export class Wall extends DurableObject<Env> {
     this.google = new Google(env, ctx.storage);
     this.canvas = new Canvas(ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
-      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog', 'jarvis', 'jarvis:state', 'jarvis:facts', 'jarvis:routines', 'jarvis:pending']);
+      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog', 'jarvis', 'jarvis:state', 'jarvis:facts', 'jarvis:routines', 'jarvis:pending', 'jarvis:study']);
+      const st = (stored.get('jarvis:study') as any) || {};
+      this.studyLog = Array.isArray(st.log) ? st.log : [];
+      this.focus = st.focus || null;
       this.routines = (stored.get('jarvis:routines') as Routine[]) || [];
       this.pendingSteps = (stored.get('jarvis:pending') as ScheduledStep[]) || [];
       this.facts = (stored.get('jarvis:facts') as MemoryFact[]) || [];
@@ -483,6 +494,7 @@ export class Wall extends DurableObject<Env> {
     const input = typeof text === 'string' ? text.trim().slice(0, MAX_COMMAND_TEXT) : '';
     let result: CommandResult;
     let logType: string | null = null;
+    const messageBefore = this.live.message ? this.live.message.id : '';
 
     if (command && command.type) {
       result = await this.runOne(command, now);
@@ -522,6 +534,16 @@ export class Wall extends DurableObject<Env> {
     }
     await this.ctx.storage.put('commandLog', this.commandLog);
 
+    // Siri (and other API callers): show the question and the answer on the wall,
+    // unless the request put its own message up (e.g. "say dinner is ready").
+    const ownMessage = (this.live.message ? this.live.message.id : '') !== messageBefore;
+    if (source === 'api' && input && result.reply && this.jarvis.showReplies && !ownMessage) {
+      const words = result.reply.split(/\s+/).length;
+      const seconds = Math.max(6, Math.min(25, Math.round(words / 2.5) + 4));
+      const at = Date.now();
+      this.setLive({ message: { id: 'r' + at.toString(36), text: result.reply, until: at + seconds * 1000, kind: 'reply', from: input } });
+    }
+
     // The briefing is an announcement: spoken whenever voice is on.
     const briefing = logType === 'jarvis.briefing' && result.ok;
     if (opts.speak || this.jarvis.voice === 'all' || (briefing && this.jarvis.voice !== 'off')) await this.say(result.reply);
@@ -531,9 +553,15 @@ export class Wall extends DurableObject<Env> {
 
   /** Runs one structured command and broadcasts what changed. */
   private async runOne(cmd: Command, now: number): Promise<CommandResult> {
-    if (/^(jarvis\.briefing|calendar\.(today|next)|canvas\.|todo\.list)/.test(cmd.type)) await this.freshen();
+    if (/^(jarvis\.briefing|calendar\.(today|next|free)|canvas\.|todo\.(list|breakdown)|work\.|focus\.(start|done))/.test(cmd.type)) await this.freshen();
     if (cmd.payload !== undefined && (typeof cmd.payload !== 'object' || cmd.payload === null)) cmd = { type: cmd.type };
     let out: { result: CommandResult; live?: LiveState; project?: Project };
+    // A new timer or a reset ends the work session that was running on the old one.
+    if (this.focus && (cmd.type === 'timer.reset' || (cmd.type === 'timer.start' && cmd.payload && (cmd.payload.minutes !== undefined || cmd.payload.seconds !== undefined || cmd.payload.pomodoro)))) {
+      await this.settleFocus(now, false);
+    }
+    const work = await this.runWork(cmd, now);
+    if (work) return work;
     if (cmd.type === 'routine.run') {
       const r = findRoutine(String((cmd.payload || {}).name || ''), this.routines);
       return r ? this.runRoutine(r, now) : { ok: false, reply: 'No routine called ' + String((cmd.payload || {}).name || '') + '.', command: cmd };
@@ -601,6 +629,138 @@ export class Wall extends DurableObject<Env> {
 
   // ---------- Jarvis ----------
 
+  // ---------- getting work done ----------
+
+  private async runWork(cmd: Command, now: number): Promise<CommandResult | null> {
+    const p = cmd.payload || {};
+    const tz = this.jarvis.timeZone;
+    const f = dayFns(tz);
+    const done = (reply: string, ok = true): CommandResult => ({ ok, reply, command: cmd });
+    switch (cmd.type) {
+      case 'work.next':
+        return done(whatNext(this.live, now, tz));
+      case 'calendar.free':
+        return done(freeTime(this.live, now, tz, p.day === 'tomorrow' ? 'tomorrow' : 'today'));
+      case 'focus.stats': {
+        const extra = this.focus && f.dayOf(this.focus.startedAt) === f.dayOf(now) ? this.focusElapsed(now) / 60000 : 0;
+        return done(studyStats(this.studyLog, Math.round(extra), now, tz, p.period === 'week' ? 'week' : 'today', this.jarvis.studyGoalMinutes));
+      }
+      case 'focus.start': {
+        const items = workItems(this.live, now, f);
+        const text = typeof p.text === 'string' ? p.text.trim().slice(0, 80) : '';
+        const item = text ? matchWork(text, items) : items[0] || null;
+        const task = item ? item.title : text ? text.charAt(0).toUpperCase() + text.slice(1) : 'Focus';
+        const course = item ? item.course : '';
+        const w = freeWindow(this.live, now, f);
+        let minutes = typeof p.minutes === 'number' && isFinite(p.minutes) ? Math.max(1, Math.min(240, p.minutes)) : 0;
+        let untilNote = '';
+        if (!minutes) {
+          // Fit the session into the free time before the next event, up to 50 minutes.
+          const free = w.busy ? 0 : w.until !== null ? (w.until - now) / 60000 - 5 : 999;
+          minutes = free >= 15 ? Math.min(50, Math.floor(free)) : 25;
+          if (free >= 15 && free < 55 && w.next) untilNote = ', until ' + w.next.title;
+        }
+        if (this.focus) await this.settleFocus(now, false);
+        const label = task.slice(0, 40);
+        const timer = await this.runOne({ type: 'timer.start', payload: { minutes, label } }, now);
+        if (!timer.ok) return done(timer.reply, false);
+        this.focus = { task, course, key: item ? item.key : '', startedAt: now, label };
+        let sceneNote = '';
+        if (this.jarvis.focusScene) {
+          const r = await this.runOne({ type: 'scene.set', payload: { name: this.jarvis.focusScene } }, now);
+          if (!r.ok) sceneNote = ' ' + r.reply;
+        }
+        await this.saveStudy(now);
+        let why = '';
+        if (item && !text) why = item.missing ? " It's missing, so it goes first." : item.due !== null ? " It's due " + whenDue(item.due, now, tz) + '.' : '';
+        return done('Working on ' + task + (course ? ' for ' + course : '') + '. ' + speakMinutes(minutes) + untilNote + '.' + why + sceneNote);
+      }
+      case 'focus.done': {
+        const text = typeof p.text === 'string' ? p.text.trim() : '';
+        const session = this.focus;
+        const minutes = session ? await this.settleFocus(now, false) : 0;
+        if (session && this.live.timer.label === session.label && this.live.timer.status !== 'idle') await this.runOne({ type: 'timer.reset' }, now);
+        const items = workItems(this.live, now, f);
+        let item = text ? matchWork(text, items) : null;
+        // "I'm done" (no name): the thing the session was for.
+        if (!item && !text && session && session.key) item = items.find((i) => i.key === session.key) || null;
+        const parts: string[] = [];
+        if (minutes) parts.push('Logged ' + speakMinutes(minutes) + ' on ' + session!.task + '.');
+        if (item && item.source === 'todo') {
+          const r = await this.runOne({ type: 'todo.complete', payload: { id: item.key.slice(2) } }, now);
+          parts.push(r.ok ? 'Checked off ' + item.title + '.' : r.reply);
+        } else if (item && item.source === 'canvas') parts.push('Nice. Remember to submit ' + item.title + ' on Canvas.');
+        else if (text && !session) return done("I couldn't find " + text + ' on your list or Canvas.', false);
+        if (!parts.length) return done("There's no work session running. Say \"start working on\" something to begin one.", false);
+        const next = workItems(this.live, now, f).filter((i) => !item || i.key !== item.key)[0];
+        if (next) parts.push('Next up: ' + next.title + (next.course ? ' for ' + next.course : '') + '.');
+        return done(parts.join(' '));
+      }
+      case 'todo.breakdown': {
+        if (brainReady(this.jarvis, this.env)) return done('Breaking work into steps needs Jarvis on (editor → Jarvis).', false);
+        if (!this.live.todos) return done('Connect Google first; the steps go on your Google Tasks list.', false);
+        const text = String(p.text || '').trim().slice(0, 120);
+        const item = matchWork(text, workItems(this.live, now, f));
+        const title = item ? item.title : text;
+        if (!title) return done('What should I break down?', false);
+        const due = item && item.due !== null && item.due > now ? f.dayOf(item.due) : null;
+        const raw = await write(
+          this.jarvis,
+          this.env,
+          'Break this task into 3 to 5 small, concrete steps a student can start right away, in order. Each step under 8 words, starting with a verb. ' +
+            'Output only the steps, one per line, no numbers or bullets. Task: "' + title.replace(/"/g, "'") + '"' + (item && item.course ? ' for ' + item.course : '') + '.',
+          this.track,
+        );
+        const steps = (raw || '')
+          .split('\n')
+          .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+          .filter((l) => l && l.length < 90)
+          .slice(0, 5);
+        if (!steps.length) return done("I couldn't come up with steps for that just now.", false);
+        const short = title.length > 24 ? title.slice(0, 22).trim() + '…' : title;
+        let added = 0;
+        for (const st of steps) {
+          const r = await this.runOne({ type: 'todo.add', payload: due ? { text: short + ': ' + st, due } : { text: short + ': ' + st } }, now);
+          if (r.ok) added++;
+        }
+        return done(
+          added ? 'Added ' + added + ' steps for ' + title + ' to your list' + (due ? ', due ' + whenDue(item!.due!, now, this.jarvis.timeZone).replace(/ at .*/, '') : '') + '. First: ' + steps[0].replace(/\.$/, '') + '.' : "Google Tasks didn't take the steps.",
+          added > 0,
+        );
+      }
+    }
+    return null;
+  }
+
+  /** How long the current session has actually run (pauses don't count while its timer is still up). */
+  private focusElapsed(now: number): number {
+    const fs = this.focus;
+    if (!fs) return 0;
+    const t = this.live.timer;
+    if (t.label === fs.label && t.status !== 'idle') return Math.max(0, t.durationMs - timerRemaining(t, now));
+    return Math.max(0, now - fs.startedAt);
+  }
+
+  /** End the running session and log it. Returns the minutes logged. */
+  private async settleFocus(now: number, finished: boolean): Promise<number> {
+    const fs = this.focus;
+    if (!fs) return 0;
+    const minutes = Math.min(12 * 60, Math.round(this.focusElapsed(now) / 60000));
+    this.focus = null;
+    if (minutes >= 1) {
+      this.studyLog = [...this.studyLog, { day: localDate(fs.startedAt, this.jarvis.timeZone), task: fs.task, course: fs.course, minutes }].slice(-600);
+      if (finished) this.justLogged = { label: fs.label, minutes };
+    }
+    await this.saveStudy(now);
+    return minutes >= 1 ? minutes : 0;
+  }
+
+  private async saveStudy(now: number) {
+    await this.ctx.storage.put('jarvis:study', { log: this.studyLog, focus: this.focus });
+    const today = localDate(now, this.jarvis.timeZone);
+    this.setLive({ study: summarizeStudy(this.studyLog, this.focus, today, this.jarvis.studyGoalMinutes, prevDay) });
+  }
+
   /**
    * Siri can ask while no display or editor is open, and then nothing has polled
    * for hours. Fetch the calendar, to-dos and Canvas again if they're old, so
@@ -645,7 +805,10 @@ export class Wall extends DurableObject<Env> {
     const failed = results.filter((x) => !x.ok);
     // The model wrote its reply before anything ran: trust it only if everything worked.
     let reply = plan.reply;
+    // Answers computed from live data (what to work on, free time…) beat the model's guess.
+    const data = plan.commands.map((c, i) => (/^(work\.|focus\.|calendar\.free|todo\.breakdown)/.test(c.type) ? results[i].reply : '')).filter(Boolean);
     if (failed.length) reply = results.map((x) => x.reply).join(' ');
+    else if (data.length) reply = data.join(' ');
     else if (!reply) reply = results.map((x) => x.reply).join(' ') || 'Done.';
     const types = plan.commands.map((c) => c.type);
     return { result: { ok: !failed.length, reply, command: plan.commands[0] }, logType: types.length ? 'jarvis: ' + types.join(', ') : 'jarvis: answer' };
@@ -823,7 +986,8 @@ export class Wall extends DurableObject<Env> {
     if (!text || this.jarvis.voice === 'off') return;
     // Class mode: stay quiet while a class is on.
     if (this.jarvis.classMode.enabled && this.jarvis.classMode.quiet && this.live.classNow) return;
-    if (this.jarvis.captions) {
+    const shown = this.live.message && this.live.message.text === text && this.live.message.until > Date.now();
+    if (this.jarvis.captions && !shown) {
       const now = Date.now();
       const seconds = Math.max(4, Math.min(20, Math.round(text.split(/\s+/).length * 0.45) + 2));
       this.live = { ...this.live, message: { id: 'j' + now.toString(36), text, until: now + seconds * 1000 } };
@@ -889,6 +1053,8 @@ export class Wall extends DurableObject<Env> {
     // These run whether or not Jarvis speaks: routine steps and class mode.
     let next = this.pendingSteps.length ? this.pendingSteps[0].at : Infinity;
     next = Math.min(next, this.classTimes(now).nextBoundary);
+    if (this.focus && this.live.timer.status === 'running' && this.live.timer.label === this.focus.label) next = Math.min(next, this.live.timer.endsAt);
+    if (this.live.study) next = Math.min(next, dayFns(this.jarvis.timeZone).endOfDay(this.live.study.day) + 1000);
     if (this.jarvis.voice === 'off' && !this.jarvis.captions) return next;
     const dlead = this.jarvis.deadlineLeadHours * 3600000;
     for (const [, due] of this.deadlineReminders()) if (due > now) next = Math.min(next, Math.max(now, due - dlead));
@@ -916,6 +1082,17 @@ export class Wall extends DurableObject<Env> {
       }
     }
     await this.syncClassMode(now);
+    // A work session ends when its timer runs out (or the timer was replaced).
+    if (this.focus) {
+      const t = this.live.timer;
+      if (t.label !== this.focus.label || t.status === 'idle') await this.settleFocus(now, false);
+      else if (t.status === 'running' && t.endsAt <= now) {
+        const task = this.focus.task;
+        const mins = await this.settleFocus(now, true);
+        this.logLine('jarvis', 'work session', 'Logged ' + speakMinutes(mins) + ' on ' + task + '.', true);
+      }
+    }
+    if (this.live.study && this.live.study.day !== localDate(now, this.jarvis.timeZone)) await this.saveStudy(now);
     if (this.jarvis.voice === 'off' && !this.jarvis.captions) return;
     let changed = false;
     // Canvas deadlines coming up and not submitted.
@@ -936,7 +1113,14 @@ export class Wall extends DurableObject<Env> {
     if (this.jarvis.announceTimers && t && t.status === 'running' && !t.pomodoro && t.endsAt <= now && t.endsAt > this.announcedTimerEnd) {
       this.announcedTimerEnd = t.endsAt;
       changed = true;
-      if (now - t.endsAt < 60000) await this.announce((t.label ? 'Your ' + t.label.toLowerCase() + ' timer' : 'Your timer') + ' is done.');
+      const logged = this.justLogged && this.justLogged.label === t.label ? this.justLogged : null;
+      this.justLogged = null;
+      if (now - t.endsAt < 60000)
+        await this.announce(
+          logged
+            ? "Time's up on " + t.label + '. That was ' + speakMinutes(logged.minutes) + '. Take a five-minute break, or say "start working" for the next thing.'
+            : (t.label ? 'Your ' + t.label.toLowerCase() + ' timer' : 'Your timer') + ' is done.',
+        );
     }
     // Events starting soon.
     const lead = this.jarvis.eventLeadMinutes * 60000;

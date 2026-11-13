@@ -1,7 +1,7 @@
 // A compact, plain-text snapshot of what the wall knows right now, so the brain
 // can answer "do I have time for a nap?" and pick sensible commands.
 
-import { isClassEvent, type ClassModeSettings } from '../../../shared/jarvis';
+import { classKind, type ClassModeSettings } from '../../../shared/jarvis';
 import { activeScene, spotifyProgress, timerRemaining, type LiveState, type Project } from '../../../shared/types';
 import { clockTime, localDate, speakableNow } from './time';
 
@@ -22,6 +22,12 @@ export function buildContext(
   lines.push('Now: ' + speakableNow(now, tz) + ' (' + tz + ')');
   if (live.classNow) lines.push('In class now: ' + live.classNow.title + ' until ' + clockTime(Date.parse(live.classNow.end), tz));
   if (routineNames.length) lines.push('Routines: ' + routineNames.join(', '));
+  const st = live.study;
+  if (st) {
+    if (st.active) lines.push('Work session: ' + st.active.task + (st.active.course ? ' [' + st.active.course + ']' : '') + ', started ' + clockTime(st.active.startedAt, tz));
+    const today = st.day === localDate(now, tz) ? st.week[st.week.length - 1] : 0;
+    lines.push('Studied today: ' + today + ' min' + (st.goalMinutes ? ' (goal ' + st.goalMinutes + ')' : ''));
+  }
 
   const scene = activeScene(project);
   lines.push('Scenes: ' + project.scenes.map((s) => s.name + (s.id === scene.id ? ' (on)' : '')).join(', '));
@@ -54,7 +60,8 @@ export function buildContext(
       .filter((e) => (e.allDay ? e.end > today : Date.parse(e.end) > now))
       .slice(0, 14)
       .map((e) => {
-        const tag = classMode && isClassEvent(e, classMode) ? ' [class]' : '';
+        const kind = classMode ? classKind(e, classMode) : null;
+        const tag = kind ? ' [' + (kind === 'class' ? 'class' : 'class: ' + kind) + ']' : '';
         if (e.allDay) return '- ' + (e.start <= today ? 'today' : e.start) + ' all day: ' + e.title;
         const start = Date.parse(e.start);
         const day = localDate(start, tz) === today ? 'today' : localDate(start, tz);
