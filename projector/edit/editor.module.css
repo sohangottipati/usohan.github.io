@@ -612,3 +612,153 @@
   min-width: 0;
   cursor: text;
 }
+
+/* ---------- motion & targets (charles-ux-animation) ---------- */
+/* Curves: --ease-out to appear, --ease-in to leave. Mirrors projector/shared/motion.ts. */
+.root {
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+}
+.hitTarget {
+  fill: transparent;
+  stroke: none;
+  cursor: grab;
+}
+.handle,
+.handleActive,
+.handleMaster {
+  pointer-events: none;
+}
+/* Small icon buttons keep their look but get a 28px+ target. */
+.root .iconBtn {
+  position: relative;
+}
+.root .iconBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 28px);
+  height: max(100%, 28px);
+  transform: translate(-50%, -50%);
+}
+/* Hover feedback only where a real pointer hovers; keyboard focus stays instant. */
+@media (hover: hover) and (pointer: fine) {
+  .root button {
+    transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  }
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+.toast,
+.noticeToast {
+  animation: toastIn 240ms var(--ease-out);
+}
+.noticeToast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--e-panel2);
+  border: 1px solid var(--e-border);
+  color: var(--e-ink);
+  padding: 8px 8px 8px 14px;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+.root .noticeToast button {
+  color: var(--e-accent);
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .noticeToast {
+    animation: none;
+  }
+  .root button {
+    transition: none;
+  }
+}
+
+/* ---------- routines ---------- */
+.routineList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+.routineCard {
+  border: 1px solid var(--e-border);
+  border-radius: 8px;
+  background: var(--e-bg);
+}
+.root .routineHead {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 8px 10px;
+  text-align: left;
+}
+.routineName {
+  font-weight: 600;
+}
+.chev {
+  margin-left: auto;
+  color: var(--e-sub);
+  display: inline-block;
+  transition: transform 250ms cubic-bezier(0.77, 0, 0.175, 1);
+}
+.chev[data-open='true'] {
+  transform: rotate(90deg);
+}
+/* Expander recipe: 250ms open, 190ms closed, ease-in-out (it resizes in place). */
+.expander {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 190ms cubic-bezier(0.77, 0, 0.175, 1);
+}
+.expander[data-open='true'] {
+  grid-template-rows: 1fr;
+  transition-duration: 250ms;
+}
+.expanderInner {
+  min-height: 0;
+  overflow: hidden;
+}
+.routineBody {
+  padding: 4px 10px 10px;
+}
+.stepList {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stepRow {
+  display: grid;
+  grid-template-columns: 96px 1fr auto auto;
+  gap: 4px;
+  align-items: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .expander,
+  .chev {
+    transition: none;
+  }
+}

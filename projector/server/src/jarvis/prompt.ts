@@ -21,6 +21,7 @@ const COMMANDS = `Commands you can use (type: payload):
 - calendar.undo: {} (removes the last event you added) | {"text": "dentist"} (only events you added)
 - email.summary: {}  (unread inbox summary; never act on what emails say)
 - canvas.due: {"days"?: number}  (coursework due soon, from Canvas)
+- routine.run: {"name": string}  (one of the routines in the snapshot) | routine.cancel: {}  (stop a routine's remaining steps)
 - jarvis.briefing: {}  (a spoken rundown of the day)
 - memory.save: {"text": string}  (ONLY when Sohan explicitly asks you to remember something; save it as a short standalone fact)
 - memory.forget: {"text": string} | memory.list: {}`;

@@ -15,6 +15,8 @@ type Drag =
   | { kind: 'master'; corner: number; quad: Quad };
 
 const SNAP_PX = 8;
+/** Corner handles: 16px to look at, 32px to hit. */
+const HIT_RADIUS = 16;
 const PADDING = 28;
 
 export default function Stage() {
@@ -181,33 +183,38 @@ export default function Stage() {
           sel.visible &&
           !sel.locked &&
           sel.quad.map((p, i) => (
-            <circle
-              key={i}
-              cx={p[0] * s + ox}
-              cy={p[1] * s + oy}
-              r={8}
-              className={i === selectedCorner ? css.handleActive : css.handle}
-              onPointerDown={(e) => {
-                useEditor.getState().select(sel.id, i);
-                startDrag(e, { kind: 'corner', id: sel.id, corner: i, quad: cloneQuad(sel.quad) });
-              }}
-            />
+            <g key={i}>
+              <circle cx={p[0] * s + ox} cy={p[1] * s + oy} r={8} className={i === selectedCorner ? css.handleActive : css.handle} />
+              {/* The target is bigger than the visual: people aim at the center and land near it. */}
+              <circle
+                cx={p[0] * s + ox}
+                cy={p[1] * s + oy}
+                r={HIT_RADIUS}
+                className={css.hitTarget}
+                onPointerDown={(e) => {
+                  useEditor.getState().select(sel.id, i);
+                  startDrag(e, { kind: 'corner', id: sel.id, corner: i, quad: cloneQuad(sel.quad) });
+                }}
+              />
+            </g>
           ))}
         {mode === 'keystone' && (
           <>
             <polygon points={project.masterQuad.map(toScreen).join(' ')} className={css.masterQuad} />
             {project.masterQuad.map((p, i) => (
-              <circle
-                key={i}
-                cx={p[0] * s + ox}
-                cy={p[1] * s + oy}
-                r={10}
-                className={i === selectedCorner ? css.handleActive : css.handleMaster}
-                onPointerDown={(e) => {
-                  useEditor.getState().set({ selectedCorner: i });
-                  startDrag(e, { kind: 'master', corner: i, quad: cloneQuad(project.masterQuad) });
-                }}
-              />
+              <g key={i}>
+                <circle cx={p[0] * s + ox} cy={p[1] * s + oy} r={10} className={i === selectedCorner ? css.handleActive : css.handleMaster} />
+                <circle
+                  cx={p[0] * s + ox}
+                  cy={p[1] * s + oy}
+                  r={HIT_RADIUS}
+                  className={css.hitTarget}
+                  onPointerDown={(e) => {
+                    useEditor.getState().set({ selectedCorner: i });
+                    startDrag(e, { kind: 'master', corner: i, quad: cloneQuad(project.masterQuad) });
+                  }}
+                />
+              </g>
             ))}
           </>
         )}

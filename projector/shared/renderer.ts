@@ -8,9 +8,8 @@ import { activeScene, type Command, type Layer, type LiveState, type MessageStat
 import { getWidget, withDefaults } from './widgets/registry';
 import { DEFAULT_THEME, type WidgetInstance } from './widgets/types';
 import { fitText } from './widgets/util';
+import { EASE_IN, EASE_OUT, MOTION } from './motion';
 
-/** Cross-fade length when the active scene changes. Opacity-only, so cheap on the projector. */
-const SCENE_FADE_MS = 600;
 
 export const HIGHLIGHT_COLORS = ['#ff2d55', '#34c759', '#0a84ff', '#ffd60a', '#bf5af2', '#ff9f0a', '#64d2ff', '#ffffff'];
 
@@ -85,6 +84,8 @@ export class SceneRenderer {
     this.msgSpan = document.createElement('span');
     this.msgSpan.style.cssText = 'display:inline-block;background:#000;padding:.15em .45em;border-radius:.2em;box-shadow:0 0 .6em .6em #000;max-width:100%;';
     this.msgText.appendChild(this.msgSpan);
+    this.msgText.style.opacity = '0';
+    this.msgText.style.transform = 'translateY(' + MOTION.messageRise + 'px)';
     this.msg.appendChild(this.msgText);
     root.appendChild(this.msg);
     this.blackout = document.createElement('div');
@@ -167,22 +168,23 @@ export class SceneRenderer {
     e.el.style.transition = 'none';
     e.el.style.opacity = '0';
     void e.el.offsetWidth; // commit the starting opacity before transitioning
-    e.el.style.transition = 'opacity ' + SCENE_FADE_MS + 'ms ease';
+    e.el.style.transition = 'opacity ' + MOTION.sceneIn + 'ms ' + EASE_OUT;
     e.el.style.opacity = '' + target;
     setTimeout(() => {
       e.el.style.transition = '';
-    }, SCENE_FADE_MS + 50);
+    }, MOTION.sceneIn + 50);
   }
 
   private fadeOut(e: Entry) {
     this.leaving.push(e);
-    e.el.style.transition = 'opacity ' + SCENE_FADE_MS + 'ms ease';
+    // Leaving is quieter and shorter than arriving.
+    e.el.style.transition = 'opacity ' + MOTION.sceneOut + 'ms ' + EASE_IN;
     e.el.style.opacity = '0';
     setTimeout(() => {
       const i = this.leaving.indexOf(e);
       if (i >= 0) this.leaving.splice(i, 1);
       this.destroyEntry(e);
-    }, SCENE_FADE_MS + 50);
+    }, MOTION.sceneOut + 50);
   }
 
   destroy() {
@@ -338,7 +340,16 @@ export class SceneRenderer {
     clearTimeout(this.msgTimer);
     const left = m ? m.until - serverNow() : 0;
     if (!m || left <= 0) {
-      this.msg.style.display = 'none';
+      if (this.msgKey) {
+        // Toast exit: fade and sink back the way it came, faster than it arrived.
+        this.msgText.style.transition = 'opacity ' + MOTION.messageOut + 'ms ' + EASE_IN + ', transform ' + MOTION.messageOut + 'ms ' + EASE_IN;
+        this.msgText.style.opacity = '0';
+        this.msgText.style.transform = 'translateY(' + MOTION.messageRise + 'px)';
+        const key = this.msgKey;
+        setTimeout(() => {
+          if (this.msgKey === '' || this.msgKey === key) this.msg.style.display = 'none';
+        }, MOTION.messageOut + 30);
+      } else this.msg.style.display = 'none';
       this.msgKey = '';
       return;
     }
@@ -350,9 +361,20 @@ export class SceneRenderer {
     this.msg.style.display = 'block';
     const key = m.id + cw + 'x' + ch;
     if (key !== this.msgKey) {
+      const wasShowing = !!this.msgKey;
       this.msgKey = key;
       this.msgSpan.textContent = m.text;
       fitText(this.msgText, ch / 6);
+      if (!wasShowing) {
+        // Toast entrance: rise 16px and fade in on the ease-out curve.
+        this.msgText.style.transition = 'none';
+        this.msgText.style.opacity = '0';
+        this.msgText.style.transform = 'translateY(' + MOTION.messageRise + 'px)';
+        void this.msgText.offsetWidth;
+        this.msgText.style.transition = 'opacity ' + MOTION.messageIn + 'ms ' + EASE_OUT + ', transform ' + MOTION.messageIn + 'ms ' + EASE_OUT;
+      }
+      this.msgText.style.opacity = '1';
+      this.msgText.style.transform = 'translateY(0)';
     }
     this.msgTimer = setTimeout(() => {
       if (this.project) this.render(this.project);

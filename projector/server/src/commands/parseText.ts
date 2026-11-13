@@ -163,6 +163,12 @@ const RULES: Rule[] = [
     test: /\bwhat do you (know|remember) about me\b|\bwhat have you remembered\b|^(list|read) (my )?memories$/,
     build: () => ({ type: 'memory.list' }),
   },
+  // ----- routines -----
+  {
+    example: 'cancel the routine',
+    test: /^(cancel|stop|abort) (the |my )?(routine|rest of the routine|what's coming|scheduled steps)$/,
+    build: () => ({ type: 'routine.cancel' }),
+  },
   // ----- jarvis -----
   {
     example: 'good morning',
