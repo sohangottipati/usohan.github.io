@@ -19,6 +19,8 @@ const QUICK: { label: string; text: string }[] = [
   { label: 'Say hi', text: 'say Hello from the wall for 10 seconds' },
   { label: 'Skip song', text: 'skip the song' },
   { label: "What's playing", text: "what's playing" },
+  { label: "What's on my list", text: "what's on my list" },
+  { label: "What's next", text: "what's next" },
 ];
 
 const DOCS = 'https://github.com/sohangottipati/usohan.github.io/blob/main/projector/docs/ios-shortcut.md';

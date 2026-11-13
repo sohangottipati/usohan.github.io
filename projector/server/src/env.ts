@@ -16,6 +16,12 @@ export interface Env {
   /** Test-only overrides so the Spotify integration can be exercised against a mock. */
   SPOTIFY_ACCOUNTS_URL?: string;
   SPOTIFY_API_URL?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  /** Test-only overrides for the Google integration. */
+  GOOGLE_AUTH_URL?: string;
+  GOOGLE_TOKEN_URL?: string;
+  GOOGLE_API_URL?: string;
 }
 
 export function allowedOrigins(env: Env): string[] {

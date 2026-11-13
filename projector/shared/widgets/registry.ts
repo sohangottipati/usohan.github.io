@@ -2,6 +2,7 @@
 // widgets/<type>/index.ts exporting a WidgetDefinition, then add it below.
 
 import type { WidgetDefinition } from './types';
+import { calendarWidget } from './calendar';
 import { clockWidget } from './clock';
 import { mediaWidget } from './media';
 import { messageWidget } from './message';
@@ -11,6 +12,7 @@ import { spotifyNowPlayingWidget } from './spotifyNowPlaying';
 import { sunArcWidget } from './sunArc';
 import { textWidget } from './text';
 import { timerWidget } from './timer';
+import { todoWidget } from './todo';
 import { weatherWidget } from './weather';
 
 const ALL: WidgetDefinition<any>[] = [
@@ -24,6 +26,8 @@ const ALL: WidgetDefinition<any>[] = [
   sunArcWidget,
   weatherWidget,
   spotifyNowPlayingWidget,
+  calendarWidget,
+  todoWidget,
 ];
 
 const byType: { [type: string]: WidgetDefinition<any> } = {};

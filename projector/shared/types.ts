@@ -116,6 +116,48 @@ export function spotifyProgress(s: SpotifyState, now: number): number {
   return Math.max(0, Math.min(s.track.durationMs, p));
 }
 
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  /** ISO date-time with offset, or YYYY-MM-DD for all-day events. */
+  start: string;
+  end: string;
+  allDay: boolean;
+  calendar: string;
+  /** Calendar color from Google, e.g. "#4285f4". */
+  color: string;
+  location: string;
+}
+
+/** Events from roughly yesterday to the day after tomorrow; widgets pick the days they show. */
+export interface CalendarState {
+  events: CalendarEvent[];
+  fetchedAt: number;
+  error: string | null;
+}
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  /** YYYY-MM-DD, or null. */
+  due: string | null;
+  notes: string;
+}
+
+export interface TodoState {
+  listName: string;
+  items: TodoItem[];
+  fetchedAt: number;
+  error: string | null;
+}
+
+/** "YYYY-MM-DD" for a Date in the browser's local time. */
+export function localDateKey(d: Date): string {
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  return d.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
+}
+
 /**
  * Shared live state, synced from the server to every client. Integrations
  * (Spotify, to-dos...) add their own keys in later milestones.
@@ -127,6 +169,9 @@ export interface LiveState {
   message: MessageState | null;
   /** null when Spotify isn't connected. */
   spotify?: SpotifyState | null;
+  /** null when Google isn't connected. */
+  calendar?: CalendarState | null;
+  todos?: TodoState | null;
   [key: string]: any;
 }
 

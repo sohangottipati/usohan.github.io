@@ -7,3 +7,8 @@ DISPLAY_KEY=local-display-key
 # your Spotify app for local dev: http://127.0.0.1:8787/api/spotify/callback
 # SPOTIFY_CLIENT_ID=
 # SPOTIFY_CLIENT_SECRET=
+
+# Optional, for Google (see projector/docs/google.md). Redirect URI for local dev:
+# http://127.0.0.1:8787/api/google/callback
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=

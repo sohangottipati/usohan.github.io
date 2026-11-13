@@ -87,6 +87,34 @@ function tail(original: string, re: RegExp): string {
   return m ? original.slice(m.index + m[0].length).trim() : '';
 }
 
+// ---------- due dates (to-dos) ----------
+
+const DUE = String.raw`(today|tonight|tomorrow|(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))`;
+
+/** "call mom tomorrow" → { text: "call mom", due: "tomorrow" }. */
+function splitDue(text: string): { text: string; due?: string } {
+  const m = new RegExp(String.raw`\s+(?:(?:due|by|on|for)\s+)?` + DUE + '$', 'i').exec(text);
+  return m ? { text: text.slice(0, m.index).trim(), due: m[1].toLowerCase().replace(/\s+/g, ' ') } : { text: text.trim() };
+}
+
+function todoAdd(text: string, due?: string): Command | null {
+  const t = text.replace(/^["“]|["”]$/g, '').trim();
+  if (!t) return null;
+  return due ? { type: 'todo.add', payload: { text: t, due: due.toLowerCase().replace(/\s+/g, ' ') } } : { type: 'todo.add', payload: { text: t } };
+}
+
+/** The original text (keeping its casing) without wake words or trailing punctuation. */
+function stripLead(original: string): string {
+  return original
+    .trim()
+    .replace(/[.!?]+$/, '')
+    .replace(/^\W*(hey|ok|okay)\s+(siri|alexa|google)\W*/i, '')
+    .replace(/^(tell|ask)\s+(the\s+)?wall\s+(to\s+)?/i, '')
+    .replace(/^(the\s+)?wall\s+/i, '')
+    .replace(/^please\s+/i, '')
+    .trim();
+}
+
 // ---------- rules ----------
 
 interface Rule {
@@ -199,19 +227,25 @@ const RULES: Rule[] = [
     build: () => ({ type: 'display.wake' }),
   },
 
-  // ----- to-dos -----
+  // ----- to-dos and calendar (before spotify: "what's next" is not "next song") -----
   {
     example: 'add buy milk to my list',
-    test: /^(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:my\s+|the\s+)?(?:to ?do|todo|to-do|task|tasks|list)(?:\s+list)?$/,
+    test: new RegExp(String.raw`^(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:my\s+|the\s+)?(?:to ?do|todo|to-do|task|tasks|list)(?:\s+list)?(?:\s+(?:(?:due|by|on|for)\s+)?` + DUE + ')?$'),
     build: (_t, original) => {
-      const m = /^(?:\W*(?:hey siri|ok google|alexa)?\W*)?(?:(?:tell|ask) (?:the )?wall (?:to )?)?(?:wall )?(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:my\s+|the\s+)?(?:to ?do|todo|to-do|task|tasks|list)/i.exec(original);
-      return { type: 'todo.add', payload: { text: (m ? m[1] : '').trim() } };
+      const m = new RegExp(String.raw`^(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:my\s+|the\s+)?(?:to ?do|todo|to-do|task|tasks|list)(?:\s+list)?(?:\s+(?:(?:due|by|on|for)\s+)?` + DUE + ')?$', 'i').exec(stripLead(original));
+      if (!m) return null;
+      return todoAdd(m[1], m[2]);
     },
   },
   {
-    example: 'remind me to call mom',
-    test: /^remind me to\s+(.+)$/,
-    build: (_t, original) => ({ type: 'todo.add', payload: { text: tail(original, /remind me to\s+/i).replace(/[.!?]+$/, '') } }),
+    example: 'remind me to call mom tomorrow',
+    test: new RegExp('^remind me (?:(?:on )?' + DUE + ' )?to\\s+(.+)$'),
+    build: (_t, original) => {
+      const m = new RegExp('^remind me (?:(?:on )?' + DUE + ' )?to\\s+(.+)$', 'i').exec(stripLead(original));
+      if (!m) return null;
+      const split = splitDue(m[2]);
+      return todoAdd(split.text, m[1] || split.due);
+    },
   },
   {
     example: 'complete buy milk',
@@ -220,6 +254,21 @@ const RULES: Rule[] = [
       const text = (m[1] || m[2] || '').replace(/^(the|my)\s+/, '').trim();
       return text ? { type: 'todo.complete', payload: { text } } : null;
     },
+  },
+  {
+    example: "what's on my list",
+    test: /\bwhat('s| is)? on (my|the) (to ?do |todo |to-do |task )?(list|tasks)\b|\bread (me )?my (to ?do |todo |to-do )?(list|tasks)\b|\bwhat do i (have|need) to do\b|^(my )?(to ?do|todo|to-do) list$/,
+    build: () => ({ type: 'todo.list' }),
+  },
+  {
+    example: "what's on my calendar",
+    test: /\bwhat('s| is)? on my (calendar|schedule|agenda)\b|\bwhat do i have (today|on today)\b|^(my )?(calendar|schedule|agenda)( today)?$/,
+    build: () => ({ type: 'calendar.today' }),
+  },
+  {
+    example: "what's next",
+    test: /\bwhat('s| is) (up )?next\b|\bnext (event|meeting|class)\b|\bwhat('s| is) my next\b|\bwhen is my next\b/,
+    build: () => ({ type: 'calendar.next' }),
   },
 
   // ----- spotify -----
