@@ -12,6 +12,11 @@ ALLOWED_ORIGINS = "https://sohan.website,https://www.sohan.website,http://localh
 # Where this API is reachable; Spotify redirects back to API_ORIGIN/api/spotify/callback.
 API_ORIGIN = "https://projector-api.sohan.website"
 
+# Workers AI: Jarvis's free brain (open models) and voice (text-to-speech).
+# Free allowance: 10,000 neurons a day, shared across models.
+[ai]
+binding = "AI"
+
 [[durable_objects.bindings]]
 name = "WALL"
 class_name = "Wall"
@@ -25,3 +30,4 @@ new_sqlite_classes = ["Wall"]
 #   EDITOR_PASSWORD, SESSION_SECRET, DISPLAY_KEY
 #   SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET (see projector/docs/spotify.md)
 #   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (see projector/docs/google.md)
+#   ANTHROPIC_API_KEY (optional, only for Jarvis on Claude; see projector/docs/jarvis.md)

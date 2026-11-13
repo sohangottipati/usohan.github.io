@@ -149,7 +149,7 @@ interface GeoResult {
   longitude: number;
 }
 
-function LocationInput({ value, onChange }: { value: LocationValue | undefined; onChange(v: LocationValue): void }) {
+export function LocationInput({ value, onChange }: { value: LocationValue | undefined; onChange(v: LocationValue): void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeoResult[] | null>(null);
   const [busy, setBusy] = useState(false);

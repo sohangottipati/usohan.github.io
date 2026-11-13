@@ -7,6 +7,7 @@ import { setServerTime } from '../shared/live';
 import type { CommandResult, Project, ServerMessage } from '../shared/types';
 import CommandsPanel from './CommandsPanel';
 import IntegrationsPanel from './IntegrationsPanel';
+import JarvisPanel from './JarvisPanel';
 import { moveQuad, nudgeCorner } from './geometry';
 import { deleteLayer, duplicateLayer, LayerPanel, PropertiesPanel } from './Panels';
 import Stage from './Stage';
@@ -207,6 +208,8 @@ function Workspace() {
           <CommandsPanel />
         ) : panel === 'integrations' ? (
           <IntegrationsPanel />
+        ) : panel === 'jarvis' ? (
+          <JarvisPanel />
         ) : (
           <PropertiesPanel displayKey={displayKey} onRotateKey={rotateKey} />
         )}
@@ -285,6 +288,9 @@ function Toolbar() {
         </Toggle>
         <Toggle on={panel === 'integrations'} onClick={() => st.set({ panel: panel === 'integrations' ? 'props' : 'integrations' })} title="Spotify, weather, Google">
           Integrations
+        </Toggle>
+        <Toggle on={panel === 'jarvis'} onClick={() => st.set({ panel: panel === 'jarvis' ? 'props' : 'jarvis' })} title="The wall's assistant: brain, voice, briefing">
+          Jarvis
         </Toggle>
       </div>
       <div className={css.spacer} />

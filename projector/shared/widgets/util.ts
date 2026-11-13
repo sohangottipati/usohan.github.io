@@ -102,6 +102,69 @@ export function playChime() {
   }
 }
 
+function base64ToBuffer(b64: string): ArrayBuffer {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+let speaking: { stop(): void } | null = null;
+
+/**
+ * Plays Jarvis's voice. Uses the AudioContext unlocked by the first remote press;
+ * falls back to an <audio> element, then to the browser's own speech synthesis.
+ * Calls done(true) once playback starts, done(false) if nothing could play.
+ */
+export function playSpeech(audioB64: string | null, mime: string, text: string, done?: (played: boolean) => void) {
+  const finish = (ok: boolean) => {
+    if (done) done(ok);
+  };
+  if (speaking) speaking.stop(); // newest reply wins
+  speaking = null;
+  const browserVoice = () => {
+    const synth = (window as any).speechSynthesis;
+    const Utter = (window as any).SpeechSynthesisUtterance;
+    if (!synth || !Utter || !text) return finish(false);
+    try {
+      synth.cancel();
+      synth.speak(new Utter(text));
+      speaking = { stop: () => synth.cancel() };
+      finish(true);
+    } catch (e) {
+      finish(false);
+    }
+  };
+  if (!audioB64) return browserVoice();
+  unlockAudio();
+  const ctx = audio;
+  if (ctx && ctx.state === 'running') {
+    const onDecoded = (buf: AudioBuffer) => {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+      speaking = { stop: () => { try { src.stop(); } catch (e) {} } };
+      finish(true);
+    };
+    try {
+      // Callback form: older WebViews don't return a promise from decodeAudioData.
+      const p: any = ctx.decodeAudioData(base64ToBuffer(audioB64), onDecoded, () => browserVoice());
+      if (p && p.catch) p.catch(() => {});
+      return;
+    } catch (e) {}
+  }
+  try {
+    const el = new Audio('data:' + mime + ';base64,' + audioB64);
+    const p: any = el.play();
+    speaking = { stop: () => el.pause() };
+    if (p && p.then) p.then(() => finish(true), () => browserVoice());
+    else finish(true);
+  } catch (e) {
+    browserVoice();
+  }
+}
+
 /** Shrinks an element's font size until its content fits its box. */
 export function fitText(node: HTMLElement, maxPx: number, minPx = 12) {
   let fs = maxPx;

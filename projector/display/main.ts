@@ -4,6 +4,7 @@
 import { apiBase, WallSocket } from '../shared/client';
 import { LiveStore, setServerTime } from '../shared/live';
 import { SceneRenderer } from '../shared/renderer';
+import { playSpeech } from '../shared/widgets/util';
 import type { Project, ServerMessage } from '../shared/types';
 
 const RELOAD_AFTER_MS = 60000;
@@ -92,6 +93,11 @@ if (!key) {
         live.set(msg.live);
       } else if (msg.t === 'command') {
         renderer.dispatchCommand(msg.command);
+      } else if (msg.t === 'speak') {
+        playSpeech(msg.audio, msg.mime, msg.text, (played) => {
+          (window as any).__wallSpoken = ((window as any).__wallSpoken || 0) + (played ? 1 : 0);
+          if (debug) statusText = (played ? 'spoke: ' : 'could not play: ') + msg.text.slice(0, 40);
+        });
       } else if (msg.t === 'pong') {
         setServerTime(msg.serverTime);
       } else if (msg.t === 'error') {

@@ -48,7 +48,7 @@ Duplicate the shortcut, delete **Dictate Text**, and set the `text` field to fix
 | add buy milk to my list · remind me to call mom tomorrow · complete buy milk · what's on my list | Google Tasks (see [google.md](google.md)) |
 | what's on my calendar today · what's next | Google Calendar |
 
-"Wall", "Hey Siri", "please" and punctuation are ignored, and numbers can be digits or words. The phrases live in [`projector/server/src/commands/parseText.ts`](../server/src/commands/parseText.ts); add a rule there to teach it new ones.
+"Wall", "Hey Siri", "please" and punctuation are ignored, and numbers can be digits or words. With **Jarvis** turned on (editor → Jarvis), you can also say things any way you like, ask questions, or chain requests. See [jarvis.md](jarvis.md). The phrases live in [`projector/server/src/commands/parseText.ts`](../server/src/commands/parseText.ts); add a rule there to teach it new ones.
 
 ## API reference (for scripts, Alexa, a Raspberry Pi…)
 
@@ -65,6 +65,8 @@ The body can be any of these:
 ```
 
 or plain text (`Content-Type: text/plain`): `timer 10 minutes`.
+
+Add `"voice": "wall"` to have Jarvis also speak the reply through the projector (useful for room mics).
 
 The reply is always JSON:
 
