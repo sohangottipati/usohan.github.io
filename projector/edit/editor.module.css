@@ -518,3 +518,37 @@
   color: var(--e-accent);
   font-size: inherit;
 }
+
+.sceneDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  margin: 0 4px;
+  border: 1px solid var(--e-sub);
+}
+.sceneDot[data-on='true'] {
+  background: #4ee08f;
+  border-color: #4ee08f;
+  box-shadow: 0 0 6px #4ee08f;
+}
+.sceneLinks {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.importBox {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--e-border);
+  border-radius: 8px;
+  background: var(--e-panel2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.importBox .row {
+  margin-top: 0;
+  flex-wrap: wrap;
+}

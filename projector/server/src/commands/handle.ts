@@ -134,6 +134,20 @@ export function runCommand(cmd: Command, st: CommandState): CommandOutcome {
     }
 
     // ---------- scenes ----------
+    case 'scene.next':
+    case 'scene.previous': {
+      if (project.scenes.length < 2) return ok(`There's only one scene, ${project.scenes[0].name}.`);
+      const i = Math.max(0, project.scenes.findIndex((s) => s.id === project.activeSceneId));
+      const n = project.scenes.length;
+      const scene = project.scenes[(i + (cmd.type === 'scene.next' ? 1 : n - 1)) % n];
+      return ok(`Switched to ${scene.name}.`, { project: { ...project, activeSceneId: scene.id } });
+    }
+    case 'scene.list': {
+      const names = project.scenes.map((s) => s.name);
+      const cur = project.scenes.find((s) => s.id === project.activeSceneId);
+      const list = names.length === 1 ? names[0] : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+      return ok(`You have ${names.length === 1 ? 'one scene' : names.length + ' scenes'}: ${list}.${cur ? ' ' + cur.name + ' is on.' : ''}`);
+    }
     case 'scene.set': {
       const want = String(p.name || p.id || '').toLowerCase().trim();
       if (!want) return fail('Which scene?');

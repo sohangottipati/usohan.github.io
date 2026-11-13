@@ -49,6 +49,10 @@ check('turn on', { type: 'display.wake' });
 check('focus mode', { type: 'scene.set', payload: { name: 'focus' } });
 check('switch to party scene', { type: 'scene.set', payload: { name: 'party' } });
 check('scene sleep', { type: 'scene.set', payload: { name: 'sleep' } });
+check('next scene', { type: 'scene.next' });
+check('go to the previous scene', { type: 'scene.previous' });
+check('what scenes do I have', { type: 'scene.list' });
+check('sleep mode', { type: 'scene.set', payload: { name: 'sleep' } });
 
 // to-dos
 check('add buy milk to my list', { type: 'todo.add', payload: { text: 'buy milk' } });

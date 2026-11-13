@@ -207,6 +207,16 @@ const RULES: Rule[] = [
 
   // ----- scenes -----
   {
+    example: 'next scene',
+    test: /^(next|previous|last) (scene|mode|preset)$|^(switch|go|change) to the (next|previous|last) (scene|mode|preset)$/,
+    build: (t) => ({ type: /next/.test(t) ? 'scene.next' : 'scene.previous' }),
+  },
+  {
+    example: 'what scenes do I have',
+    test: /\bwhat (scenes|modes|presets)\b|\b(list|which) (the )?(scenes|modes|presets)\b|^(scenes|my scenes)$/,
+    build: () => ({ type: 'scene.list' }),
+  },
+  {
     example: 'focus scene',
     test: /^(?:(?:switch|change|go|set|turn|put)\s+(?:it\s+)?(?:to|on)?\s*)?(?:the\s+)?(.+?)\s+(scene|mode|preset)$|^(?:scene|preset)\s+(.+)$/,
     build: (_t, _o, m) => {

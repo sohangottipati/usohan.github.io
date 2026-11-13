@@ -43,7 +43,7 @@ Duplicate the shortcut, delete **Dictate Text**, and set the `text` field to fix
 | start a pomodoro · stop pomodoro | 25 min focus / 5 min break, with a 15 min break every 4th round, until stopped |
 | say dinner is ready · show Happy Birthday for 30 seconds | Shows a message on the wall (10 s by default) |
 | blackout · turn off the wall · go dark / wake up · turn on | Blacks out the projector / brings it back |
-| focus mode · switch to party scene | Switches scene (once you've made scenes) |
+| focus mode · switch to party scene · next scene · what scenes do I have | Scenes (see [scenes.md](scenes.md)) |
 | skip the song · previous song · pause · play · volume 40 · turn it up · what's playing | Spotify (see [spotify.md](spotify.md)) |
 | add buy milk to my list · remind me to call mom tomorrow · complete buy milk · what's on my list | Google Tasks (see [google.md](google.md)) |
 | what's on my calendar today · what's next | Google Calendar |
@@ -91,6 +91,7 @@ The reply is always JSON:
 | `text.say` | `{ "text", "seconds"? }` (1–3600, default 10) |
 | `display.blackout` · `display.wake` | — |
 | `scene.set` | `{ "name" }` (case-insensitive, prefix match is fine) |
+| `scene.next` · `scene.previous` · `scene.list` | — |
 | `spotify.next` · `spotify.previous` · `spotify.play` · `spotify.pause` · `spotify.status` | — |
 | `spotify.volume` | `{ "percent" }` or `{ "delta": 10 }` |
 | `todo.add` | `{ "text", "due"? }` (`today`, `tomorrow`, `friday`, `next monday` or `YYYY-MM-DD`) |
