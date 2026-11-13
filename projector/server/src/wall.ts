@@ -18,7 +18,8 @@ import { validateProject } from '../../shared/validate';
 import { createSession, isEditor, randomToken, safeEqual, sessionCookie } from './auth';
 import { advanceTimer, runCommand } from './commands/handle';
 import { parseText } from './commands/parseText';
-import { isLocalDev, isOriginAllowed, type Env } from './env';
+import { isLocalDev, isOriginAllowed, originOk, type Env } from './env';
+import { Spotify, spotifyChanged } from './integrations/spotify';
 
 type Role = 'editor' | 'display';
 
@@ -33,6 +34,11 @@ const COMMAND_LOG_SIZE = 50;
 const COMMAND_RATE = 30; // per minute, per wall
 const TOKEN_FAILURE_LIMIT = 10; // wrong tokens per minute before refusing everything for a minute
 const MAX_COMMAND_TEXT = 500;
+// Spotify polling while any screen is connected: often while music plays, less when it doesn't.
+const SPOTIFY_POLL_PLAYING_MS = 3000;
+const SPOTIFY_POLL_IDLE_MS = 10000;
+const SPOTIFY_POLL_QUIET_MS = 30000;
+const SPOTIFY_QUIET_AFTER_MS = 10 * 60 * 1000;
 
 function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -51,9 +57,13 @@ export class Wall extends DurableObject<Env> {
   private commandLog: CommandLogEntry[] = [];
   private commandTimes: number[] = [];
   private tokenFailures: number[] = [];
+  private spotify: Spotify;
+  private nextSpotifyPoll = Infinity;
+  private lastMusicAt = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.spotify = new Spotify(env, ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
       const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog']);
       const p = stored.get('project');
@@ -90,6 +100,17 @@ export class Wall extends DurableObject<Env> {
     // Voice assistants and scripts: bearer token, no cookie, no CORS.
     if (path === '/api/command' && req.method === 'POST') return this.commandApi(req);
 
+    // Spotify sends the browser back here after login (no cookie needed: the state value is the proof).
+    if (path === '/api/spotify/callback' && req.method === 'GET') return this.spotifyCallback(url);
+    // The spec's direct Spotify routes accept the command token as well as the editor cookie.
+    if (path.indexOf('/api/spotify/') === 0 && /^Bearer\s/i.test(req.headers.get('Authorization') || '')) {
+      if (!this.bearerOk(req)) {
+        await req.text();
+        return json({ ok: false, reply: 'Wrong or missing command token.' }, 401);
+      }
+      return this.spotifyRoute(req, path);
+    }
+
     if (path === '/api/login' && req.method === 'POST') return this.login(req);
     if (path === '/api/logout' && req.method === 'POST') {
       return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0, isLocalDev(this.env)) });
@@ -119,6 +140,26 @@ export class Wall extends DurableObject<Env> {
       return json({ token: this.commandToken });
     }
     if (path === '/api/commands' && req.method === 'GET') return json({ entries: this.commandLog });
+    if (path === '/api/integrations' && req.method === 'GET') {
+      return json({ spotify: await this.spotify.status(), weather: { provider: 'Open-Meteo', configured: true } });
+    }
+    if (path === '/api/spotify/connect' && req.method === 'POST') {
+      if (!this.spotify.configured) return json({ ok: false, error: 'Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to the server first.' }, 400);
+      const body: any = await req.json().catch(() => ({}));
+      const returnTo = typeof body.returnTo === 'string' ? body.returnTo : '';
+      let origin = '';
+      try {
+        origin = new URL(returnTo).origin;
+      } catch (e) {}
+      if (!originOk(this.env, origin)) return json({ ok: false, error: 'Bad return address' }, 400);
+      return json({ ok: true, url: await this.spotify.authUrl(returnTo) });
+    }
+    if (path === '/api/spotify/disconnect' && req.method === 'POST') {
+      await this.spotify.disconnect();
+      this.setSpotify(null);
+      return json({ ok: true });
+    }
+    if (path.indexOf('/api/spotify/') === 0) return this.spotifyRoute(req, path);
     if (path === '/api/media' && req.method === 'POST') return this.putMedia(req);
 
     return json({ ok: false, error: 'Not found' }, 404);
@@ -159,6 +200,71 @@ export class Wall extends DurableObject<Env> {
     return json(result);
   }
 
+  private bearerOk(req: Request): boolean {
+    const m = /^Bearer\s+(.+)$/i.exec(req.headers.get('Authorization') || '');
+    return !!m && safeEqual(m[1].trim(), this.commandToken);
+  }
+
+  // ---------- Spotify ----------
+
+  private async spotifyCallback(url: URL): Promise<Response> {
+    const r = await this.spotify.callback(url);
+    if (r.ok) {
+      // Fetch now-playing right away so the editor shows it on return.
+      this.nextSpotifyPoll = Date.now();
+      await this.scheduleAlarm();
+    }
+    let target = '';
+    try {
+      const u = new URL(r.returnTo);
+      if (originOk(this.env, u.origin)) {
+        u.searchParams.set('spotify', r.ok ? 'connected' : 'error');
+        u.searchParams.set('message', r.message);
+        target = u.toString();
+      }
+    } catch (e) {}
+    if (target) return new Response(null, { status: 302, headers: { Location: target } });
+    const msg = r.message.replace(/[<>&]/g, '');
+    return new Response('<!doctype html><meta charset="utf-8"><title>Spotify</title><p style="font:16px sans-serif">' + msg + '</p>', {
+      status: r.ok ? 200 : 400,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
+  }
+
+  /** GET /api/spotify/now-playing, POST /api/spotify/{next|previous|play|pause|volume}. */
+  private async spotifyRoute(req: Request, path: string): Promise<Response> {
+    const action = path.slice('/api/spotify/'.length);
+    if (action === 'now-playing' && req.method === 'GET') return json(this.live.spotify || { connected: false });
+    if (req.method === 'POST' && ['next', 'previous', 'play', 'pause', 'volume'].indexOf(action) >= 0) {
+      const body: any = await req.json().catch(() => ({}));
+      const payload = action === 'volume' ? { percent: body.percent } : undefined;
+      return json(await this.execute(this.bearerOk(req) ? 'api' : 'editor', undefined, { type: 'spotify.' + action, payload }));
+    }
+    return json({ ok: false, error: 'Not found' }, 404);
+  }
+
+  private setSpotify(next: LiveState['spotify']) {
+    this.live = { ...this.live, spotify: next };
+    this.broadcast({ t: 'live', live: this.live, serverTime: Date.now() });
+    this.dirty = true;
+  }
+
+  private async pollSpotify() {
+    const now = Date.now();
+    const sample = await this.spotify.poll(now);
+    if (sample === null) {
+      this.nextSpotifyPoll = Infinity;
+      if (this.live.spotify) this.setSpotify(null);
+      return;
+    }
+    if (sample.isPlaying) this.lastMusicAt = now;
+    if (spotifyChanged(this.live.spotify, sample, now)) this.setSpotify(sample);
+    const quiet = now - this.lastMusicAt > SPOTIFY_QUIET_AFTER_MS;
+    const interval = sample.isPlaying ? SPOTIFY_POLL_PLAYING_MS : quiet ? SPOTIFY_POLL_QUIET_MS : SPOTIFY_POLL_IDLE_MS;
+    // Only keep polling while someone is looking.
+    this.nextSpotifyPoll = this.ctx.getWebSockets().length ? now + interval : Infinity;
+  }
+
   /** Parses (if needed), runs, logs and broadcasts a command. */
   private async execute(source: string, text?: string, command?: Command): Promise<CommandResult> {
     const now = Date.now();
@@ -171,7 +277,20 @@ export class Wall extends DurableObject<Env> {
       result = input ? { ok: false, reply: `Sorry, I didn't understand "${input}".` } : { ok: false, reply: 'Empty command.' };
     } else {
       if (cmd.payload !== undefined && (typeof cmd.payload !== 'object' || cmd.payload === null)) cmd = { type: cmd.type };
-      const out = runCommand(cmd, { live: this.live, project: this.project, now });
+      let out: { result: CommandResult; live?: LiveState; project?: Project };
+      if (cmd.type.indexOf('spotify.') === 0) {
+        const r = await this.spotify.control(cmd, this.live.spotify, now);
+        out = { result: { ok: r.ok, reply: r.reply } };
+        // Show what we already know changed; the next poll confirms it.
+        if (r.patch && this.live.spotify) out.live = { ...this.live, spotify: { ...this.live.spotify, ...r.patch } };
+      } else {
+        out = runCommand(cmd, { live: this.live, project: this.project, now });
+      }
+      if (cmd.type.indexOf('spotify.') === 0 && cmd.type !== 'spotify.status' && out.result.ok) {
+        // Spotify's state lags a little behind the command; look again shortly.
+        this.lastMusicAt = now;
+        this.nextSpotifyPoll = now + 700;
+      }
       result = { ...out.result, command: cmd };
       if (out.live) {
         this.live = out.live;
@@ -299,6 +418,11 @@ export class Wall extends DurableObject<Env> {
       role,
     });
     if (role === 'editor') this.sendTo(server, { t: 'commandLog', entries: this.commandLog });
+    // Someone is watching: make sure now-playing is fresh and polling is on.
+    if (await this.spotify.connected()) {
+      if (this.nextSpotifyPoll > Date.now() + 1000) this.nextSpotifyPoll = Date.now() + 200;
+      await this.scheduleAlarm();
+    }
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -381,6 +505,7 @@ export class Wall extends DurableObject<Env> {
     if (this.dirty) next = this.lastPersist + PERSIST_INTERVAL_MS;
     const t = this.live.timer;
     if (t && t.status === 'running' && t.pomodoro) next = Math.min(next, t.endsAt);
+    next = Math.min(next, this.nextSpotifyPoll);
     const current = await this.ctx.storage.getAlarm();
     if (next === Infinity) {
       if (current !== null) await this.ctx.storage.deleteAlarm();
@@ -410,6 +535,7 @@ export class Wall extends DurableObject<Env> {
       this.broadcast({ t: 'live', live: this.live, serverTime: Date.now() });
       this.dirty = true;
     }
+    if (Date.now() >= this.nextSpotifyPoll - 50) await this.pollSpotify();
     await this.persist();
     await this.scheduleAlarm();
   }

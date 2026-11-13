@@ -17,6 +17,8 @@ const QUICK: { label: string; text: string }[] = [
   { label: '+5 min', text: 'add 5 minutes' },
   { label: 'Cancel', text: 'cancel the timer' },
   { label: 'Say hi', text: 'say Hello from the wall for 10 seconds' },
+  { label: 'Skip song', text: 'skip the song' },
+  { label: "What's playing", text: "what's playing" },
 ];
 
 const DOCS = 'https://github.com/sohangottipati/usohan.github.io/blob/main/projector/docs/ios-shortcut.md';

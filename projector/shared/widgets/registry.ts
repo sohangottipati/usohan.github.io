@@ -7,6 +7,7 @@ import { mediaWidget } from './media';
 import { messageWidget } from './message';
 import { particlesWidget } from './particles';
 import { shapeWidget } from './shape';
+import { spotifyNowPlayingWidget } from './spotifyNowPlaying';
 import { sunArcWidget } from './sunArc';
 import { textWidget } from './text';
 import { timerWidget } from './timer';
@@ -22,6 +23,7 @@ const ALL: WidgetDefinition<any>[] = [
   particlesWidget,
   sunArcWidget,
   weatherWidget,
+  spotifyNowPlayingWidget,
 ];
 
 const byType: { [type: string]: WidgetDefinition<any> } = {};

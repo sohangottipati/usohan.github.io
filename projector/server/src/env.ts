@@ -9,6 +9,13 @@ export interface Env {
   COMMAND_TOKEN?: string;
   /** Set to "true" only by `npm run dev` (wrangler dev --var). */
   LOCAL_DEV?: string;
+  /** Public origin of this API, used for OAuth redirect URIs. */
+  API_ORIGIN: string;
+  SPOTIFY_CLIENT_ID?: string;
+  SPOTIFY_CLIENT_SECRET?: string;
+  /** Test-only overrides so the Spotify integration can be exercised against a mock. */
+  SPOTIFY_ACCOUNTS_URL?: string;
+  SPOTIFY_API_URL?: string;
 }
 
 export function allowedOrigins(env: Env): string[] {
@@ -34,7 +41,11 @@ export function isLocalDev(env: Env): boolean {
  * editor works on :3001 or 127.0.0.1. The deployed API never allows them.
  */
 export function isOriginAllowed(env: Env, req: Request): boolean {
-  const origin = req.headers.get('Origin');
+  return originOk(env, req.headers.get('Origin'));
+}
+
+/** Same rule as isOriginAllowed, for an origin string (e.g. an OAuth return URL). */
+export function originOk(env: Env, origin: string | null): boolean {
   if (!origin) return false;
   if (allowedOrigins(env).indexOf(origin) >= 0) return true;
   return isLocalDev(env) && LOCAL_ORIGIN.test(origin);

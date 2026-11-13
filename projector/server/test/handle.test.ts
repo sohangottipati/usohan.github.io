@@ -57,7 +57,7 @@ const say = run('text.say', { text: 'Dinner!', seconds: 30 });
 eq('say', [live.message!.text, live.message!.until - now], ['Dinner!', 30000]);
 eq('scene', runCommand({ type: 'scene.set', payload: { name: 'foc' } }, { live, project, now }).project!.activeSceneId, 'f');
 eq('scene missing', runCommand({ type: 'scene.set', payload: { name: 'party' } }, { live, project, now }).result.reply, "There's no party scene. You have Default, Focus.");
-eq('spotify later', run('spotify.next').result, { ok: false, reply: "Spotify isn't connected yet." });
+eq('todo later', run('todo.add', { text: 'x' }).result, { ok: false, reply: "To-dos aren't set up yet." });
 eq('unknown', run('nope').result.ok, false);
 
 if (failed) {
