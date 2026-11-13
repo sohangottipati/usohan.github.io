@@ -230,7 +230,7 @@ export default function IntegrationsPanel() {
         <h3 className={css.h3}>Google Calendar &amp; Tasks</h3>
         {spotify && !google && (
           <p className={css.replyBad}>
-            The wall API is running older code without Google. In <code>projector/server</code>, run <code>git pull &amp;&amp; npm run deploy</code>, then reload.
+            The wall API is running older code without Google. In <code>projector/server</code>, run <code>git pull &amp;&amp; npm install &amp;&amp; npm run deploy</code>, then reload.
           </p>
         )}
         {google && !google.configured && (

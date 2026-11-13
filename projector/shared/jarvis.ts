@@ -1,6 +1,19 @@
 // Jarvis (the wall's assistant) settings, shared by the editor and the server.
 
 export type BrainProvider = 'off' | 'workers-ai' | 'claude';
+
+/** A fact Sohan asked Jarvis to remember ("remember that…"). */
+export interface MemoryFact {
+  id: string;
+  text: string;
+  at: number;
+}
+
+// Everything here is sent with every brain request, so it's capped.
+export const MAX_FACTS = 50;
+export const MAX_FACT_CHARS = 300;
+export const MAX_MEMORY_CHARS = 3000;
+export const MAX_ABOUT_ME_CHARS = 1000;
 export type VoiceMode = 'off' | 'announcements' | 'all';
 
 export interface JarvisSettings {
@@ -11,6 +24,8 @@ export interface JarvisSettings {
   name: string;
   /** Extra personality / house rules, appended to the system prompt. */
   personality: string;
+  /** Standing facts about Sohan (school, routines, preferences). */
+  aboutMe: string;
   /** How long Jarvis remembers the conversation, for follow-ups like "make that 30". */
   memoryMinutes: number;
   /** Speak replies through the projector: never, only for announcements, or every reply. */
@@ -39,6 +54,7 @@ export function defaultJarvisSettings(): JarvisSettings {
     claudeModel: CLAUDE_MODELS[0],
     name: 'Jarvis',
     personality: '',
+    aboutMe: '',
     memoryMinutes: 5,
     voice: 'announcements',
     voiceModel: '@cf/myshell-ai/melotts',
@@ -67,6 +83,7 @@ export function sanitizeJarvisSettings(input: any): JarvisSettings {
     claudeModel: str(s.claudeModel, d.claudeModel, 80),
     name: str(s.name, d.name, 30),
     personality: typeof s.personality === 'string' ? s.personality.slice(0, 1500) : '',
+    aboutMe: typeof s.aboutMe === 'string' ? s.aboutMe.slice(0, MAX_ABOUT_ME_CHARS) : '',
     memoryMinutes: num(s.memoryMinutes, d.memoryMinutes, 0, 60),
     voice: ['off', 'announcements', 'all'].indexOf(s.voice) >= 0 ? s.voice : d.voice,
     voiceModel: str(s.voiceModel, d.voiceModel, 120),

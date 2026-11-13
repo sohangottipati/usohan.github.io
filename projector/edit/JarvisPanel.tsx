@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CLAUDE_MODELS, WORKERS_MODELS, type JarvisSettings } from '../shared/jarvis';
+import { CLAUDE_MODELS, MAX_ABOUT_ME_CHARS, MAX_FACTS, MAX_MEMORY_CHARS, WORKERS_MODELS, type JarvisSettings, type MemoryFact } from '../shared/jarvis';
 import { playSpeech } from '../shared/widgets/util';
 import { api } from './api';
 import { LocationInput } from './SettingsForm';
@@ -29,6 +29,7 @@ export default function JarvisPanel() {
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
   const [tryText, setTryText] = useState('');
+  const [facts, setFacts] = useState<MemoryFact[]>([]);
 
   const load = () =>
     api('/api/jarvis')
@@ -36,6 +37,7 @@ export default function JarvisPanel() {
         setSaved(d.settings);
         setDraft(d.settings);
         setStatus(d.status);
+        setFacts(d.facts || []);
         setError(null);
       })
       .catch((e) => setError(e.message));
@@ -44,7 +46,14 @@ export default function JarvisPanel() {
     load();
   }, []);
 
-  if (error) return aside(<p className={css.errorText}>{error.indexOf('404') >= 0 || error === 'Not found' ? 'The wall API is on older code without Jarvis. Run git pull && npm run deploy in projector/server.' : error}</p>);
+  // A "remember that…" from Siri or another device: refresh the list when a new command lands.
+  const latest = useEditor((st) => (st.commandLog[0] ? st.commandLog[0].at : 0));
+  useEffect(() => {
+    if (latest) refreshFacts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latest]);
+
+  if (error) return aside(<p className={css.errorText}>{error.indexOf('404') >= 0 || error === 'Not found' ? 'The wall API is on older code without Jarvis. Run git pull && npm install && npm run deploy in projector/server.' : error}</p>);
   if (!draft || !status) return aside(<p className={css.muted}>Loading…</p>);
 
   const set = (patch: Partial<JarvisSettings>) => setDraft({ ...draft, ...patch });
@@ -91,6 +100,13 @@ export default function JarvisPanel() {
     setBusy('');
     flash('');
     setNote((r.ok ? '' : '⚠ ') + r.reply);
+    refreshFacts(); // "remember that…" may have changed the list
+  }
+
+  function refreshFacts() {
+    api('/api/jarvis')
+      .then((d) => setFacts(d.facts || []))
+      .catch(() => {});
   }
 
   const brainLabel = draft.provider === 'workers-ai' ? 'Workers AI model' : 'Claude model';
@@ -133,11 +149,26 @@ export default function JarvisPanel() {
           <span className={css.fieldLabel}>House rules (optional)</span>
           <textarea className={css.input} rows={3} placeholder="e.g. Call me boss. Keep replies under 10 words." value={draft.personality} onChange={(e) => set({ personality: e.target.value })} />
         </label>
+        <label className={css.field}>
+          <span className={css.fieldLabel}>
+            About me ({draft.aboutMe.length}/{MAX_ABOUT_ME_CHARS})
+          </span>
+          <textarea
+            className={css.input}
+            rows={4}
+            maxLength={MAX_ABOUT_ME_CHARS}
+            placeholder="e.g. CS + Business student at UCR. Classes are on my calendar. Bedtime is around 1 AM. Pizza means a 12-minute oven timer."
+            value={draft.aboutMe}
+            onChange={(e) => set({ aboutMe: e.target.value })}
+          />
+        </label>
         <div className={css.cornerRow} style={{ gridTemplateColumns: '1fr 80px' }}>
           <span className={css.cornerName}>Remembers the conversation for (minutes)</span>
           <input className={css.input} type="number" min={0} max={60} value={draft.memoryMinutes} onChange={(e) => set({ memoryMinutes: +e.target.value })} />
         </div>
       </section>
+
+      <Memories facts={facts} setFacts={setFacts} name={draft.name} />
 
       <section className={css.section}>
         <h3 className={css.h3}>Voice</h3>
@@ -251,7 +282,7 @@ function aside(children: React.ReactNode) {
 
 function StatusLine({ draft, saved, status }: { draft: JarvisSettings; saved: JarvisSettings; status: Status }) {
   if (draft.provider === 'off') return <p className={css.help}>Only the built-in phrases work (see the Commands panel). Turn on a brain for anything else.</p>;
-  if (draft.provider === 'workers-ai' && !status.workersAI) return <p className={css.replyBad}>Workers AI isn&apos;t available on the server. Redeploy the API (git pull && npm run deploy).</p>;
+  if (draft.provider === 'workers-ai' && !status.workersAI) return <p className={css.replyBad}>Workers AI isn&apos;t available on the server. Redeploy the API (git pull && npm install && npm run deploy).</p>;
   if (draft.provider === 'claude' && !status.claudeKey)
     return (
       <p className={css.replyBad}>
@@ -261,4 +292,81 @@ function StatusLine({ draft, saved, status }: { draft: JarvisSettings; saved: Ja
   if (draft.provider !== saved.provider) return <p className={css.help}>Save to switch brains.</p>;
   if (status.lastError) return <p className={css.replyBad}>Last problem: {status.lastError}</p>;
   return <p className={css.replyOk}>Ready{status.lastMs ? ` · last answer took ${(status.lastMs / 1000).toFixed(1)} s` : ''}</p>;
+}
+
+function Memories({ facts, setFacts, name }: { facts: MemoryFact[]; setFacts(f: MemoryFact[]): void; name: string }) {
+  const [text, setText] = useState('');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [msg, setMsg] = useState('');
+  const used = facts.reduce((n, f) => n + f.text.length, 0);
+
+  async function call(path: string, method: string, body?: unknown) {
+    try {
+      const d = await api(path, { method, body: body ? JSON.stringify(body) : '{}' });
+      setFacts(d.facts || []);
+      setMsg(d.ok === false ? d.reply : '');
+      return d;
+    } catch (e: any) {
+      setMsg(e.message);
+      return null;
+    }
+  }
+
+  return (
+    <section className={css.section}>
+      <h3 className={css.h3}>Memories</h3>
+      <p className={css.help} style={{ marginTop: 0 }}>
+        Say &quot;remember that…&quot;, &quot;forget…&quot; or &quot;what do you know about me&quot;. {name} only saves what you ask it to, and sees all of this with every request.
+      </p>
+      <div className={css.meter}>
+        <div style={{ width: Math.min(100, (used / MAX_MEMORY_CHARS) * 100) + '%' }} />
+      </div>
+      <p className={css.help}>
+        {facts.length}/{MAX_FACTS} facts · {used}/{MAX_MEMORY_CHARS} characters
+      </p>
+      <ul className={css.factList}>
+        {facts.map((f) => (
+          <li key={f.id} className={css.factItem}>
+            {editing === f.id ? (
+              <input
+                autoFocus
+                className={css.input}
+                defaultValue={f.text}
+                onBlur={async (e) => {
+                  if (e.target.value.trim() && e.target.value !== f.text) await call('/api/jarvis/memories/' + f.id, 'PUT', { text: e.target.value });
+                  setEditing(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'Escape') setEditing(null);
+                }}
+              />
+            ) : (
+              <span className={css.factText} onClick={() => setEditing(f.id)} title="Click to edit">
+                {f.text}
+              </span>
+            )}
+            <button className={css.iconBtn} title="Forget this" onClick={() => call('/api/jarvis/memories/' + f.id, 'DELETE')}>
+              ✕
+            </button>
+          </li>
+        ))}
+      </ul>
+      <form
+        className={css.row}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!text.trim()) return;
+          const d = await call('/api/jarvis/memories', 'POST', { text });
+          if (d && d.ok) setText('');
+        }}
+      >
+        <input className={css.input} value={text} placeholder="Mom's birthday is March 3" onChange={(e) => setText(e.target.value)} />
+        <button type="submit" disabled={!text.trim()}>
+          Add
+        </button>
+      </form>
+      {msg && <p className={css.replyBad}>{msg}</p>}
+    </section>
+  );
 }

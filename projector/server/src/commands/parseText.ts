@@ -144,6 +144,25 @@ function timerLabel(t: string): string {
 }
 
 const RULES: Rule[] = [
+  // ----- jarvis memory (works with the brain off too) -----
+  {
+    example: 'remember that my mom’s birthday is March 3',
+    test: /^(please )?remember (that )?(?!to\b)(.+)$/,
+    build: (_t, original) => {
+      const m = /remember\s+(?:that\s+)?(.+)$/i.exec(stripLead(original));
+      return m && m[1].trim() ? { type: 'memory.save', payload: { text: m[1].trim() } } : null;
+    },
+  },
+  {
+    example: 'forget the thing about pizza',
+    test: /^forget (?:that |about |the (?:thing|fact|note) (?:about|that) )?(.+)$/,
+    build: (_t, _o, m) => ({ type: 'memory.forget', payload: { text: m[1].trim() } }),
+  },
+  {
+    example: 'what do you know about me',
+    test: /\bwhat do you (know|remember) about me\b|\bwhat have you remembered\b|^(list|read) (my )?memories$/,
+    build: () => ({ type: 'memory.list' }),
+  },
   // ----- jarvis -----
   {
     example: 'good morning',

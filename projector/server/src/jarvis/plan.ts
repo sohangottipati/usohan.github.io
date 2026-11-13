@@ -32,6 +32,9 @@ export const BRAIN_COMMANDS = [
   'todo.add',
   'todo.complete',
   'jarvis.briefing',
+  'memory.save',
+  'memory.forget',
+  'memory.list',
 ];
 
 /** Pull the first balanced {...} object out of a model's text. */

@@ -30,7 +30,7 @@ You can check how much of the free allowance you've used in the Cloudflare dashb
 
 1. Deploy the latest API. The `[ai]` binding in `wrangler.toml` turns Workers AI on; there's nothing else to sign up for.
    ```bash
-   cd ~/usohan.github.io/projector/server && git pull && npm run deploy
+   cd ~/usohan.github.io/projector/server && git pull && npm install && npm run deploy
    ```
 2. Editor → **Jarvis** → Brain: **Workers AI** → **Save**. The status should say **Ready**.
 3. Try "my pizza's done in like 12 minutes" in the **Try it** box.
@@ -69,6 +69,22 @@ A room mic, or any script, can ask for a spoken reply by adding `"voice": "wall"
 - **Morning briefing:** weather for the place you pick, today's events, and overdue or due-today to-dos, at the time you set. If the projector is off then, it waits up to 4 hours for a display to connect. Say **"good morning"** or **"brief me"** any time, or use **Brief me now** in the panel.
 
 With a brain on, the briefing is phrased naturally; without one, it's a plain summary. All announcements show up in **Commands → Recent commands** with the source *jarvis*.
+
+## Memory
+
+Jarvis has three kinds of memory:
+
+| | What it is | How long |
+|---|---|---|
+| **Conversation** | The last few exchanges, so "make that 30" works | Minutes (set in the panel; default 5) |
+| **About me** | A box in the panel for standing facts: school, routines, preferences | Until you change it (up to 1,000 characters) |
+| **Memories** | Facts you ask it to keep: "remember that Mom's birthday is March 3" | Until you delete them (up to 50 facts / 3,000 characters) |
+
+- **"Remember that …"** saves a fact. **"Forget …"** removes the closest match ("forget the pizza thing"). **"What do you know about me?"** reads them back. These work even with the brain off.
+- Jarvis **only saves what you ask it to**. It never quietly collects things from conversation.
+- The **Memories** list in the panel shows everything saved; click a fact to edit it, or ✕ to delete it.
+- About me and every saved fact go to the model with every request. That's what makes answers personal, and it's why there's a cap: a maxed-out memory still leaves room for roughly 100+ requests a day on the free default model.
+- The model doesn't learn or change; the memory is just text it's shown each time, so you can always see exactly what it knows.
 
 ## Personality
 
