@@ -88,5 +88,6 @@ You can deploy to `projector-wall.<you>.workers.dev` by commenting out `routes` 
 | `SESSION_SECRET` | Signs the HTTP-only session cookie. Changing it signs everyone out. |
 | `DISPLAY_KEY` | Initial display key. After you press **Rotate key** in the editor, the rotated key (stored in the Durable Object) is used instead. |
 | `ALLOWED_ORIGINS` (var in `wrangler.toml`) | Origins allowed to use the editor cookie. |
+| `COMMAND_TOKEN` (optional) | Bearer token for `/api/command`. If unset, one is generated on first use; see it, copy it and rotate it in the editor's **Commands** panel. See [ios-shortcut.md](ios-shortcut.md). |
 
-`COMMAND_TOKEN`, `SPOTIFY_*` and `GOOGLE_*` arrive with later milestones.
+`SPOTIFY_*` and `GOOGLE_*` arrive with later milestones.

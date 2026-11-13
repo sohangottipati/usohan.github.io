@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiBase, WallSocket } from '../shared/client';
 import { api } from './api';
 import { setServerTime } from '../shared/live';
-import type { Project, ServerMessage } from '../shared/types';
+import type { CommandResult, Project, ServerMessage } from '../shared/types';
+import CommandsPanel from './CommandsPanel';
 import { moveQuad, nudgeCorner } from './geometry';
 import { deleteLayer, duplicateLayer, LayerPanel, PropertiesPanel } from './Panels';
 import Stage from './Stage';
-import { selectedLayer, setSenders, useEditor } from './store';
+import { selectedLayer, sendCommand, setSenders, useEditor } from './store';
 import css from './editor.module.css';
 
 const SEND_INTERVAL_MS = 40;
@@ -75,6 +76,7 @@ function Workspace() {
   const project = useEditor((s) => s.project);
   const status = useEditor((s) => s.status);
   const error = useEditor((s) => s.error);
+  const panel = useEditor((s) => s.panel);
   const [displayKey, setDisplayKey] = useState<string | null>(null);
   const socketRef = useRef<WallSocket | null>(null);
   // Edits made while offline are pushed to the server once we reconnect.
@@ -83,6 +85,7 @@ function Workspace() {
   // ---------- socket + throttled project sending ----------
   useEffect(() => {
     let pending: Project | null = null;
+    const pendingCommands = new Map<string, (r: CommandResult) => void>();
     let timer: any = null;
     let lastSent = 0;
     const flush = () => {
@@ -104,6 +107,18 @@ function Workspace() {
         timer = setTimeout(flush, wait);
       },
       (calibration) => socketRef.current?.send({ t: 'setCalibration', calibration }),
+      (input) =>
+        new Promise<CommandResult>((resolve) => {
+          const id = Math.random().toString(36).slice(2);
+          if (!socketRef.current?.send({ t: 'command', id, ...input })) {
+            resolve({ ok: false, reply: 'Offline. Try again when the editor reconnects.' });
+            return;
+          }
+          pendingCommands.set(id, resolve);
+          setTimeout(() => {
+            if (pendingCommands.delete(id)) resolve({ ok: false, reply: 'No reply from the wall.' });
+          }, 10000);
+        }),
     );
 
     const socket = new WallSocket({
@@ -125,6 +140,14 @@ function Workspace() {
           if (!st.gestureStart) st.receive(msg.project);
         } else if (msg.t === 'live') {
           st.set({ live: msg.live });
+        } else if (msg.t === 'commandLog') {
+          st.set({ commandLog: msg.entries });
+        } else if (msg.t === 'commandResult') {
+          const resolve = pendingCommands.get(msg.id);
+          if (resolve) {
+            pendingCommands.delete(msg.id);
+            resolve(msg.result);
+          }
         } else if (msg.t === 'pong') {
           setServerTime(msg.serverTime);
         } else if (msg.t === 'error') {
@@ -165,7 +188,7 @@ function Workspace() {
       <div className={css.main}>
         <LayerPanel />
         <Stage />
-        <PropertiesPanel displayKey={displayKey} onRotateKey={rotateKey} />
+        {panel === 'commands' ? <CommandsPanel /> : <PropertiesPanel displayKey={displayKey} onRotateKey={rotateKey} />}
       </div>
       {error && (
         <div className={css.toast} onClick={() => useEditor.getState().set({ error: null })}>
@@ -192,6 +215,7 @@ function Toolbar() {
   const mode = useEditor((s) => s.mode);
   const canUndo = useEditor((s) => s.past.length > 0);
   const canRedo = useEditor((s) => s.future.length > 0);
+  const panel = useEditor((s) => s.panel);
   const st = useEditor.getState();
   const cal = live.calibration;
 
@@ -226,6 +250,18 @@ function Toolbar() {
       <div className={css.group}>
         <button onClick={() => st.undo()} disabled={!canUndo} title="Ctrl+Z">Undo</button>
         <button onClick={() => st.redo()} disabled={!canRedo} title="Ctrl+Shift+Z">Redo</button>
+      </div>
+      <div className={css.group}>
+        <Toggle
+          on={live.blackout}
+          onClick={() => sendCommand({ command: { type: live.blackout ? 'display.wake' : 'display.blackout' } })}
+          title="Turn the whole projector output black (display.blackout / display.wake)"
+        >
+          Blackout
+        </Toggle>
+        <Toggle on={panel === 'commands'} onClick={() => st.set({ panel: panel === 'commands' ? 'props' : 'commands' })} title="Voice / command API, timer, log">
+          Commands
+        </Toggle>
       </div>
       <div className={css.spacer} />
       <button

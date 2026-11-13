@@ -4,9 +4,10 @@
 
 import { IDENTITY, multiply, rectToQuad, scaleTranslate, toMatrix3d, type Mat3 } from './homography';
 import { LiveStore, serverNow } from './live';
-import { activeScene, type Command, type Layer, type LiveState, type Project } from './types';
+import { activeScene, type Command, type Layer, type LiveState, type MessageState, type Project } from './types';
 import { getWidget, withDefaults } from './widgets/registry';
 import { DEFAULT_THEME, type WidgetInstance } from './widgets/types';
+import { fitText } from './widgets/util';
 
 export const HIGHLIGHT_COLORS = ['#ff2d55', '#34c759', '#0a84ff', '#ffd60a', '#bf5af2', '#ff9f0a', '#64d2ff', '#ffffff'];
 
@@ -41,6 +42,11 @@ export class SceneRenderer {
   private grid: HTMLDivElement;
   private gridKey = '';
   private blackout: HTMLDivElement;
+  private msg: HTMLDivElement;
+  private msgText: HTMLDivElement;
+  private msgSpan: HTMLSpanElement;
+  private msgKey = '';
+  private msgTimer: any = null;
   private vw = 0;
   private vh = 0;
   private project: Project | null = null;
@@ -60,6 +66,21 @@ export class SceneRenderer {
     this.grid = document.createElement('div');
     this.grid.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none;z-index:100000;display:none;';
     root.appendChild(this.grid);
+    // Fallback spot for "say …" messages when the scene has no Message layer.
+    this.msg = document.createElement('div');
+    this.msg.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none;z-index:99999;display:none;';
+    this.msgText = document.createElement('div');
+    this.msgText.style.cssText =
+      'position:absolute;left:10%;top:25%;width:80%;height:50%;display:flex;align-items:center;justify-content:center;text-align:center;' +
+      'overflow:hidden;line-height:1.1;white-space:pre-wrap;word-wrap:break-word;color:#fff;font-weight:600;' +
+      "font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;";
+    // A black panel behind the words: on a projector that's "no light", so the
+    // message reads cleanly over whatever layers are underneath.
+    this.msgSpan = document.createElement('span');
+    this.msgSpan.style.cssText = 'display:inline-block;background:#000;padding:.15em .45em;border-radius:.2em;box-shadow:0 0 .6em .6em #000;max-width:100%;';
+    this.msgText.appendChild(this.msgSpan);
+    this.msg.appendChild(this.msgText);
+    root.appendChild(this.msg);
     this.blackout = document.createElement('div');
     this.blackout.style.cssText = 'position:absolute;left:0;top:0;right:0;bottom:0;background:#000;z-index:100001;display:none;';
     root.appendChild(this.blackout);
@@ -107,10 +128,30 @@ export class SceneRenderer {
       }
     }
     this.syncGrid(cw, ch, base, cal.grid);
+    let messageLayer = false;
+    for (let i = 0; i < scene.layers.length; i++) {
+      if (scene.layers[i].visible && scene.layers[i].widget === 'message') messageLayer = true;
+    }
+    this.syncMessage(cw, ch, base, messageLayer ? null : live.message);
     this.blackout.style.display = live.blackout && this.opts.mode === 'display' ? 'block' : 'none';
   }
 
+  /** Forward a command that ran on the server to every widget's onCommand(). */
+  dispatchCommand(cmd: Command) {
+    for (const id in this.entries) {
+      const inst = this.entries[id].instance;
+      if (inst && inst.onCommand) {
+        try {
+          inst.onCommand(cmd);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
+  }
+
   destroy() {
+    clearTimeout(this.msgTimer);
     this.unsub();
     for (const id in this.entries) this.destroyEntry(this.entries[id]);
     this.entries = {};
@@ -254,6 +295,31 @@ export class SceneRenderer {
       }
     }
     if (e.el.parentNode) e.el.parentNode.removeChild(e.el);
+  }
+
+  private syncMessage(cw: number, ch: number, base: Mat3, m: MessageState | null) {
+    clearTimeout(this.msgTimer);
+    const left = m ? m.until - serverNow() : 0;
+    if (!m || left <= 0) {
+      this.msg.style.display = 'none';
+      this.msgKey = '';
+      return;
+    }
+    const t = toMatrix3d(base);
+    this.msg.style.width = cw + 'px';
+    this.msg.style.height = ch + 'px';
+    this.msg.style.transform = t;
+    (this.msg.style as any).webkitTransform = t;
+    this.msg.style.display = 'block';
+    const key = m.id + cw + 'x' + ch;
+    if (key !== this.msgKey) {
+      this.msgKey = key;
+      this.msgSpan.textContent = m.text;
+      fitText(this.msgText, ch / 6);
+    }
+    this.msgTimer = setTimeout(() => {
+      if (this.project) this.render(this.project);
+    }, left + 50);
   }
 
   private syncGrid(cw: number, ch: number, base: Mat3, on: boolean) {

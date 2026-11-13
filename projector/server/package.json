@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "wrangler dev --port 8787 --var LOCAL_DEV:true",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "for f in test/*.test.ts; do esbuild \"$f\" --bundle --platform=node --log-level=warning --outfile=.wrangler/test/out.js && node .wrangler/test/out.js || exit 1; done"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250610.0",

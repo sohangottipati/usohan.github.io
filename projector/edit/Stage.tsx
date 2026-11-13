@@ -6,7 +6,7 @@ import { LiveStore } from '../shared/live';
 import { fitCanvas, SceneRenderer } from '../shared/renderer';
 import { activeScene, type Point, type Quad } from '../shared/types';
 import { cloneQuad, dragCorner, dragMove, snapTargets } from './geometry';
-import { useEditor } from './store';
+import { sendCommand, useEditor } from './store';
 import css from './editor.module.css';
 
 type Drag =
@@ -36,7 +36,15 @@ export default function Stage() {
   useEffect(() => {
     const liveStore = new LiveStore();
     liveRef.current = liveStore;
-    const r = new SceneRenderer(previewRef.current!, { mode: 'editor', applyMaster: false, live: liveStore, padding: PADDING });
+    const r = new SceneRenderer(previewRef.current!, {
+      mode: 'editor',
+      applyMaster: false,
+      live: liveStore,
+      padding: PADDING,
+      sendCommand: async (command) => {
+        await sendCommand({ command });
+      },
+    });
     rendererRef.current = r;
     return () => {
       r.destroy();
