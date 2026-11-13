@@ -214,6 +214,7 @@ function Workspace() {
           <PropertiesPanel displayKey={displayKey} onRotateKey={rotateKey} />
         )}
       </div>
+      <Notice />
       {error && (
         <div className={css.toast} onClick={() => useEditor.getState().set({ error: null })}>
           {error}
@@ -375,4 +376,32 @@ function useKeyboard() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+}
+
+/** "Deleted Shape 1 · Undo", shown for 6 seconds. */
+function Notice() {
+  const notice = useEditor((s) => s.notice);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => {
+      if (useEditor.getState().notice === notice) useEditor.getState().set({ notice: null });
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
+  if (!notice) return null;
+  return (
+    <div className={css.noticeToast} key={notice.at} role="status">
+      <span>{notice.text}</span>
+      {notice.undo && (
+        <button
+          onClick={() => {
+            useEditor.getState().undo();
+            useEditor.getState().set({ notice: null });
+          }}
+        >
+          Undo
+        </button>
+      )}
+    </div>
+  );
 }

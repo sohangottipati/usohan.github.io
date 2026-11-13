@@ -170,6 +170,14 @@ export interface CanvasState {
   error: string | null;
 }
 
+export interface ClassNow {
+  title: string;
+  /** ISO */
+  start: string;
+  end: string;
+  location: string;
+}
+
 /** "YYYY-MM-DD" for a Date in the browser's local time. */
 export function localDateKey(d: Date): string {
   const m = d.getMonth() + 1;
@@ -193,6 +201,10 @@ export interface LiveState {
   todos?: TodoState | null;
   /** null when Canvas isn't connected. */
   canvas?: CanvasState | null;
+  /** The class happening right now (class mode), or null. */
+  classNow?: ClassNow | null;
+  /** The next class within a day (class mode), or null. */
+  classNext?: ClassNow | null;
   [key: string]: any;
 }
 

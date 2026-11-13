@@ -7,6 +7,7 @@ import { timerRemaining, type CommandResult } from '../shared/types';
 import { formatClock } from '../shared/widgets/util';
 import { api } from './api';
 import { sendCommand, useEditor } from './store';
+import { useDelayed } from './useDelayed';
 import css from './editor.module.css';
 
 const QUICK: { label: string; text: string }[] = [
@@ -38,6 +39,7 @@ export default function CommandsPanel() {
   const log = useEditor((s) => s.commandLog);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const showBusy = useDelayed(busy);
   const [last, setLast] = useState<CommandResult | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
@@ -82,7 +84,7 @@ export default function CommandsPanel() {
         >
           <input className={css.input} value={text} placeholder="timer 10 minutes" onChange={(e) => setText(e.target.value)} />
           <button type="submit" disabled={busy || !text.trim()}>
-            Send
+            {showBusy ? '…' : 'Send'}
           </button>
         </form>
         {last && <p className={last.ok ? css.replyOk : css.replyBad}>{last.reply}</p>}

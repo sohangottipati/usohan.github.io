@@ -9,6 +9,53 @@ export interface MemoryFact {
   at: number;
 }
 
+/** A routine step: run a wall phrase, say something aloud, or wait. */
+export interface RoutineStep {
+  kind: 'do' | 'speak' | 'wait';
+  /** do: a phrase like "sleep mode"; speak: words; wait: minutes */
+  value: string;
+}
+
+export interface Routine {
+  id: string;
+  name: string;
+  /** What you say to run it ("goodnight", "good night"). */
+  phrases: string[];
+  steps: RoutineStep[];
+}
+
+export const MAX_ROUTINES = 20;
+export const MAX_ROUTINE_STEPS = 15;
+
+/** Starter routines, offered (not forced) in the editor. */
+export function starterRoutines(): Omit<Routine, 'id'>[] {
+  return [
+    {
+      name: "I'm home",
+      phrases: ["i'm home", 'im home', "i'm back"],
+      steps: [
+        { kind: 'do', value: 'wake up' },
+        { kind: 'do', value: 'default mode' },
+        { kind: 'do', value: 'play music' },
+        { kind: 'speak', value: 'Welcome back.' },
+        { kind: 'do', value: 'brief me' },
+      ],
+    },
+    {
+      name: 'Goodnight',
+      phrases: ['goodnight', 'good night', 'going to bed'],
+      steps: [
+        { kind: 'do', value: 'sleep mode' },
+        { kind: 'do', value: 'volume 25' },
+        { kind: 'speak', value: 'Goodnight. Going dark in ten minutes.' },
+        { kind: 'wait', value: '10' },
+        { kind: 'do', value: 'pause the music' },
+        { kind: 'do', value: 'blackout' },
+      ],
+    },
+  ];
+}
+
 // Everything here is sent with every brain request, so it's capped.
 export const MAX_FACTS = 50;
 export const MAX_FACT_CHARS = 300;
@@ -42,6 +89,33 @@ export interface JarvisSettings {
   announceTimers: boolean;
   announceEvents: boolean;
   eventLeadMinutes: number;
+  /** "HW 3 is due in 3 hours and isn't submitted." */
+  announceDeadlines: boolean;
+  deadlineLeadHours: number;
+  classMode: ClassModeSettings;
+}
+
+export interface ClassModeSettings {
+  enabled: boolean;
+  /** Calendars whose events are classes, comma-separated names (e.g. "School, UCR"). */
+  calendars: string;
+  /** Also treat events titled like a course ("CS 100", "MATH 10A") as classes. */
+  courseCodes: boolean;
+  /** Scene to switch to during class ('' = don't switch). */
+  scene: string;
+  /** No spoken replies or announcements during class. */
+  quiet: boolean;
+}
+
+/** Does this calendar event look like a class? */
+export function isClassEvent(e: { title: string; calendar: string; allDay: boolean }, c: ClassModeSettings): boolean {
+  if (e.allDay) return false;
+  const cals = c.calendars
+    .split(',')
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+  if (cals.length && cals.some((x) => e.calendar.toLowerCase().indexOf(x) >= 0)) return true;
+  return c.courseCodes && /\b[A-Z]{2,5}\s?\d{1,3}[A-Z]{0,2}\b/.test(e.title);
 }
 
 export const WORKERS_MODELS = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct-fast'];
@@ -66,6 +140,9 @@ export function defaultJarvisSettings(): JarvisSettings {
     announceTimers: true,
     announceEvents: true,
     eventLeadMinutes: 10,
+    announceDeadlines: true,
+    deadlineLeadHours: 3,
+    classMode: { enabled: false, calendars: '', courseCodes: true, scene: '', quiet: true },
   };
 }
 
@@ -95,6 +172,18 @@ export function sanitizeJarvisSettings(input: any): JarvisSettings {
     announceTimers: bool(s.announceTimers, d.announceTimers),
     announceEvents: bool(s.announceEvents, d.announceEvents),
     eventLeadMinutes: num(s.eventLeadMinutes, d.eventLeadMinutes, 1, 120),
+    announceDeadlines: bool(s.announceDeadlines, d.announceDeadlines),
+    deadlineLeadHours: num(s.deadlineLeadHours, d.deadlineLeadHours, 1, 72),
+    classMode: (() => {
+      const c = s.classMode && typeof s.classMode === 'object' ? s.classMode : {};
+      return {
+        enabled: bool(c.enabled, d.classMode.enabled),
+        calendars: typeof c.calendars === 'string' ? c.calendars.slice(0, 200) : '',
+        courseCodes: bool(c.courseCodes, d.classMode.courseCodes),
+        scene: typeof c.scene === 'string' ? c.scene.slice(0, 60) : '',
+        quiet: bool(c.quiet, d.classMode.quiet),
+      };
+    })(),
   };
 }
 

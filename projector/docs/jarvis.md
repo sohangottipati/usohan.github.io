@@ -66,9 +66,44 @@ A room mic, or any script, can ask for a spoken reply by adding `"voice": "wall"
 
 - **Timers:** "Your pizza timer is done." Pomodoro: "Focus session done. Take five minutes." / "Break's over. Back to focus."
 - **Events:** "Heads up: CS 100 lecture starts in 10 minutes." (Lead time is set in the panel.)
+- **Canvas deadlines:** "Heads up: HW 3 for CS 100 is due in 3 hours, and it isn't submitted yet." Once per assignment, only if it's still unsubmitted. Lead time (hours) is set in the panel.
 - **Morning briefing:** weather for the place you pick, today's events, and overdue or due-today to-dos, at the time you set. If the projector is off then, it waits up to 4 hours for a display to connect. Say **"good morning"** or **"brief me"** any time, or use **Brief me now** in the panel.
 
 With a brain on, the briefing is phrased naturally; without one, it's a plain summary. All announcements show up in **Commands → Recent commands** with the source *jarvis*.
+
+## Routines
+
+A routine is one phrase that runs several steps. In the panel's **Routines** section, **Add starter routines** gives you:
+
+- **I'm home:** wake up, default scene, play music, "Welcome back.", morning briefing
+- **Goodnight:** sleep scene, volume 25, "Going dark in ten minutes.", wait 10 min, pause the music, blackout
+
+Steps come in three kinds:
+
+| Kind | Value | Example |
+| --- | --- | --- |
+| Do | any built-in wall phrase | `focus mode`, `volume 30`, `timer 25 minutes`, `blackout` |
+| Say aloud | what Jarvis says | `Time to wind down.` |
+| Wait (min) | minutes before the next step | `10` |
+
+"Do" steps use the built-in phrase parser, not the brain, so they're instant, free and predictable. Run one by saying any of its phrases ("Hey Siri, Wall… goodnight", "run goodnight") or with **Run now** after saving. Say **"cancel the routine"** to drop steps that are still waiting. With a brain on, you can also ask loosely ("I'm heading to bed"). Limits: 20 routines, 15 steps each.
+
+## Class mode
+
+Turn on **Class mode** in the panel. An event counts as a class when it's on one of the calendars you list (e.g. `UCR`), or when its title looks like a course code ("CS 100", "MATH 10A"). All-day events never count.
+
+When a class starts:
+
+- the wall switches to the scene you picked (e.g. a "Focus" scene with an Agenda and a Class layer)
+- Jarvis stays quiet until it ends (optional; captions still show)
+
+When it ends, the wall switches back, unless you changed the scene yourself during class.
+
+The **Class** layer shows "In class · CS 100 · 40 min left · MSE 104" with a progress bar, or the next class if it starts within a few hours.
+
+## Agenda layer
+
+**Agenda** puts calendar events and Canvas deadlines in one list, grouped by day (Today, Tomorrow, then weekdays). Missing Canvas work goes at the top in red. Optionally it also shows to-dos that have a due date. Events happening now get a "Now" marker, and finished events fade.
 
 ## Memory
 

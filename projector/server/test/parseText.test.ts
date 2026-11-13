@@ -86,6 +86,8 @@ check('do I have any new emails', { type: 'email.summary' });
 check("what's due this week", { type: 'canvas.due', payload: { days: 7 } });
 check('any homework due tomorrow', { type: 'canvas.due', payload: { days: 2 } });
 
+check('cancel the routine', { type: 'routine.cancel' });
+
 // spotify
 check('skip the song', { type: 'spotify.next' });
 check('skip', { type: 'spotify.next' });

@@ -36,6 +36,8 @@ export const BRAIN_COMMANDS = [
   'calendar.undo',
   'email.summary',
   'canvas.due',
+  'routine.run',
+  'routine.cancel',
   'memory.save',
   'memory.forget',
   'memory.list',

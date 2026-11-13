@@ -9,9 +9,11 @@ function mins(ms: number): string {
   return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + ' min';
 }
 
-export function buildContext(live: LiveState, project: Project, now: number, tz: string): string {
+export function buildContext(live: LiveState, project: Project, now: number, tz: string, routineNames: string[] = []): string {
   const lines: string[] = [];
   lines.push('Now: ' + speakableNow(now, tz) + ' (' + tz + ')');
+  if (live.classNow) lines.push('In class now: ' + live.classNow.title + ' until ' + clockTime(Date.parse(live.classNow.end), tz));
+  if (routineNames.length) lines.push('Routines: ' + routineNames.join(', '));
 
   const scene = activeScene(project);
   lines.push('Scenes: ' + project.scenes.map((s) => s.name + (s.id === scene.id ? ' (on)' : '')).join(', '));

@@ -18,7 +18,9 @@ import { validateProject } from '../../shared/validate';
 import { createSession, isEditor, randomToken, safeEqual, sessionCookie } from './auth';
 import { advanceTimer, runCommand } from './commands/handle';
 import { parseTextDetailed } from './commands/parseText';
-import { defaultJarvisSettings, sanitizeJarvisSettings, type JarvisSettings, type MemoryFact } from '../../shared/jarvis';
+import { defaultJarvisSettings, isClassEvent, sanitizeJarvisSettings, type JarvisSettings, type MemoryFact, type Routine } from '../../shared/jarvis';
+import { findRoutine, matchRoutine, planRoutine, sanitizeRoutines, type ScheduledStep } from './jarvis/routines';
+import { parseText } from './commands/parseText';
 import { addFact, cleanFact, forgetFact, listFacts, totalChars } from './jarvis/memory';
 import { MAX_FACT_CHARS, MAX_MEMORY_CHARS } from '../../shared/jarvis';
 import { brainReady, think, write } from './jarvis/brain';
@@ -94,6 +96,12 @@ export class Wall extends DurableObject<Env> {
   private announcedEvents: string[] = [];
   private lastBriefingDate = '';
   private briefingPendingUntil = 0;
+  private routines: Routine[] = [];
+  /** Routine steps waiting for their time ("…wait 10 minutes, then blackout"). */
+  private pendingSteps: ScheduledStep[] = [];
+  private announcedDeadlines: string[] = [];
+  /** The class class mode is handling, and the scene to go back to afterwards. */
+  private classState: { id: string; prevSceneId: string | null; switchedTo: string | null } | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -101,7 +109,9 @@ export class Wall extends DurableObject<Env> {
     this.google = new Google(env, ctx.storage);
     this.canvas = new Canvas(ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
-      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog', 'jarvis', 'jarvis:state', 'jarvis:facts']);
+      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog', 'jarvis', 'jarvis:state', 'jarvis:facts', 'jarvis:routines', 'jarvis:pending']);
+      this.routines = (stored.get('jarvis:routines') as Routine[]) || [];
+      this.pendingSteps = (stored.get('jarvis:pending') as ScheduledStep[]) || [];
       this.facts = (stored.get('jarvis:facts') as MemoryFact[]) || [];
       this.jarvis = sanitizeJarvisSettings(stored.get('jarvis'));
       const js = (stored.get('jarvis:state') as any) || {};
@@ -109,6 +119,8 @@ export class Wall extends DurableObject<Env> {
       this.announcedEvents = js.announcedEvents || [];
       this.lastBriefingDate = js.lastBriefingDate || '';
       this.briefingPendingUntil = js.briefingPendingUntil || 0;
+      this.announcedDeadlines = js.announcedDeadlines || [];
+      this.classState = js.classState || null;
       const p = stored.get('project');
       if (p && validateProject(p) === null) this.project = p as Project;
       const l = stored.get('live') as LiveState | undefined;
@@ -198,6 +210,15 @@ export class Wall extends DurableObject<Env> {
       const displays = this.ctx.getWebSockets('display').length;
       if (speech) this.broadcast({ t: 'speak', text, audio: speech.audio, mime: speech.mime });
       return json({ ok: !!speech, text, audio: speech ? speech.audio : null, mime: speech ? speech.mime : null, displays });
+    }
+    if (path === '/api/jarvis/routines' && req.method === 'PUT') {
+      const body: any = await req.json().catch(() => null);
+      this.routines = sanitizeRoutines(body && body.routines, () => randomToken(6));
+      await this.ctx.storage.put('jarvis:routines', this.routines);
+      // Drop waiting steps of routines that were deleted.
+      this.pendingSteps = this.pendingSteps.filter((p) => this.routines.some((r) => r.id === p.routineId));
+      await this.ctx.storage.put('jarvis:pending', this.pendingSteps);
+      return json({ ok: true, routines: this.routines });
     }
     if (path === '/api/jarvis/memories' && req.method === 'POST') {
       const body: any = await req.json().catch(() => ({}));
@@ -465,6 +486,11 @@ export class Wall extends DurableObject<Env> {
       logType = command.type;
     } else if (!input) {
       result = { ok: false, reply: 'Empty command.' };
+    } else if (matchRoutine(input, this.routines)) {
+      const r = matchRoutine(input, this.routines)!;
+      result = await this.runRoutine(r, now);
+      logType = 'routine: ' + r.name;
+      this.remember(input, result.reply, now);
     } else {
       const parsed = parseTextDetailed(input);
       const brainOn = this.jarvis.provider !== 'off';
@@ -504,6 +530,16 @@ export class Wall extends DurableObject<Env> {
   private async runOne(cmd: Command, now: number): Promise<CommandResult> {
     if (cmd.payload !== undefined && (typeof cmd.payload !== 'object' || cmd.payload === null)) cmd = { type: cmd.type };
     let out: { result: CommandResult; live?: LiveState; project?: Project };
+    if (cmd.type === 'routine.run') {
+      const r = findRoutine(String((cmd.payload || {}).name || ''), this.routines);
+      return r ? this.runRoutine(r, now) : { ok: false, reply: 'No routine called ' + String((cmd.payload || {}).name || '') + '.', command: cmd };
+    }
+    if (cmd.type === 'routine.cancel') {
+      const n = this.pendingSteps.length;
+      this.pendingSteps = [];
+      await this.ctx.storage.put('jarvis:pending', this.pendingSteps);
+      return { ok: true, reply: n ? 'Cancelled what was still coming.' : 'Nothing was scheduled.', command: cmd };
+    }
     if (cmd.type === 'memory.save' || cmd.type === 'memory.forget' || cmd.type === 'memory.list') {
       const p = cmd.payload || {};
       const r =
@@ -564,7 +600,7 @@ export class Wall extends DurableObject<Env> {
   /** Ask the brain for a plan and carry it out. `fallback` is the parser's guess, used if the brain is unreachable. */
   private async askJarvis(input: string, now: number, fallback: Command | null): Promise<{ result: CommandResult; logType: string | null }> {
     const memory = this.memory.filter((m) => now - m.at < this.jarvis.memoryMinutes * 60000);
-    const context = buildContext(this.live, this.project, now, this.jarvis.timeZone);
+    const context = buildContext(this.live, this.project, now, this.jarvis.timeZone, this.routines.map((r) => r.name));
     const r = await think(this.jarvis, this.env, input, context, memory, this.facts);
     this.lastBrainMs = r.ms;
     if ('error' in r) {
@@ -616,6 +652,113 @@ export class Wall extends DurableObject<Env> {
     this.nextCanvasPoll = this.ctx.getWebSockets().length ? now + CANVAS_POLL_MS : Infinity;
   }
 
+  /** Runs a routine's immediate steps; schedules the ones after a "wait". */
+  private async runRoutine(r: Routine, now: number): Promise<CommandResult> {
+    const plan = planRoutine(r, now);
+    // Running a routine again replaces whatever of it was still waiting.
+    this.pendingSteps = this.pendingSteps.filter((p) => p.routineId !== r.id).concat(plan.later).sort((a, b) => a.at - b.at);
+    await this.ctx.storage.put('jarvis:pending', this.pendingSteps);
+    const spoken: string[] = [];
+    const problems: string[] = [];
+    for (const st of plan.now) {
+      const res = await this.runStep(st, now);
+      if (res.spoken) spoken.push(res.spoken);
+      if (res.problem) problems.push(res.problem);
+    }
+    if (spoken.length) await this.say(spoken.join(' '));
+    let reply = spoken.join(' ') || r.name + ': done.';
+    if (plan.later.length) {
+      const mins = Math.round((plan.later[0].at - now) / 60000);
+      if (!spoken.length) reply += mins < 1 ? ' More in under a minute.' : ' More in ' + mins + (mins === 1 ? ' minute.' : ' minutes.');
+    }
+    if (problems.length) reply += ' ' + problems.join(' ');
+    return { ok: !problems.length, reply, command: { type: 'routine.run', payload: { name: r.name } } };
+  }
+
+  /** One routine step. "do" runs a built-in phrase (deterministic and free, no brain). */
+  private async runStep(st: { kind: string; value: string }, now: number): Promise<{ spoken?: string; problem?: string }> {
+    if (st.kind === 'speak') return { spoken: st.value };
+    if (st.kind !== 'do') return {};
+    const cmd = parseText(st.value);
+    if (!cmd) return { problem: 'I didn’t understand the step "' + st.value + '".' };
+    const res = await this.runOne(cmd, now);
+    // A briefing's reply is meant to be heard.
+    if (cmd.type === 'jarvis.briefing' && res.ok) return { spoken: res.reply };
+    return res.ok ? {} : { problem: res.reply };
+  }
+
+  /** Canvas work worth a heads-up: [id, due, item]. */
+  private deadlineReminders(): [string, number][] {
+    const c = this.live.canvas;
+    if (!c || c.error || !this.jarvis.announceDeadlines) return [];
+    const out: [string, number][] = [];
+    for (const i of c.items) {
+      if (i.submitted || !i.due || this.announcedDeadlines.indexOf(i.id) >= 0) continue;
+      const due = Date.parse(i.due);
+      if (isFinite(due)) out.push([i.id, due]);
+    }
+    return out;
+  }
+
+  /** The class happening now and the next class start, from the calendar. */
+  private classTimes(now: number): {
+    current: { id: string; title: string; start: number; end: number; location: string } | null;
+    upcoming: { title: string; start: number; end: number; location: string } | null;
+    nextBoundary: number;
+  } {
+    const cm = this.jarvis.classMode;
+    const cal = this.live.calendar;
+    let current: { id: string; title: string; start: number; end: number; location: string } | null = null;
+    let upcoming: { title: string; start: number; end: number; location: string } | null = null;
+    let next = Infinity;
+    if (!cm.enabled || !cal) return { current, upcoming, nextBoundary: next };
+    for (const e of cal.events) {
+      if (!isClassEvent(e, cm)) continue;
+      const start = Date.parse(e.start);
+      const end = Date.parse(e.end);
+      if (!isFinite(start) || !isFinite(end)) continue;
+      if (start <= now && now < end && !current) current = { id: e.id, title: e.title, start, end, location: e.location };
+      if (start > now) {
+        next = Math.min(next, start);
+        if (start < now + 24 * 3600000 && (!upcoming || start < upcoming.start)) upcoming = { title: e.title, start, end, location: e.location };
+      }
+    }
+    if (current) next = Math.min(next, current.end);
+    return { current, upcoming, nextBoundary: next };
+  }
+
+  /** Enter or leave class mode as classes start and end. */
+  private async syncClassMode(now: number) {
+    const { current, upcoming } = this.classTimes(now);
+    const cm = this.jarvis.classMode;
+    const iso = (ms: number) => new Date(ms).toISOString();
+    const nextLive = upcoming ? { title: upcoming.title, start: iso(upcoming.start), end: iso(upcoming.end), location: upcoming.location } : null;
+    if (JSON.stringify(nextLive) !== JSON.stringify(this.live.classNext || null)) this.setLive({ classNext: nextLive });
+    if (current && (!this.classState || this.classState.id !== current.id)) {
+      const prev = this.classState ? this.classState.prevSceneId : this.project.activeSceneId;
+      let switchedTo: string | null = null;
+      const scene = cm.scene ? this.project.scenes.find((sc) => sc.name.toLowerCase() === cm.scene.toLowerCase()) : null;
+      if (scene && scene.id !== this.project.activeSceneId) {
+        await this.runOne({ type: 'scene.set', payload: { id: scene.id, name: scene.name } }, now);
+        switchedTo = scene.id;
+      } else if (this.classState) switchedTo = this.classState.switchedTo;
+      this.classState = { id: current.id, prevSceneId: prev, switchedTo };
+      this.setLive({ classNow: { title: current.title, start: new Date(current.start).toISOString(), end: new Date(current.end).toISOString(), location: current.location } });
+      await this.saveJarvisState();
+    } else if (!current && this.classState) {
+      const st = this.classState;
+      this.classState = null;
+      // Only switch back if nobody changed the scene during class.
+      if (st.switchedTo && this.project.activeSceneId === st.switchedTo && st.prevSceneId && this.project.scenes.some((sc) => sc.id === st.prevSceneId)) {
+        await this.runOne({ type: 'scene.set', payload: { id: st.prevSceneId } }, now);
+      }
+      this.setLive({ classNow: null });
+      await this.saveJarvisState();
+    } else if (!current && this.live.classNow) {
+      this.setLive({ classNow: null });
+    }
+  }
+
   private remember(user: string, reply: string, now: number) {
     this.memory = [...this.memory.filter((m) => now - m.at < this.jarvis.memoryMinutes * 60000), { at: now, user, reply }].slice(-MEMORY_SIZE);
   }
@@ -630,6 +773,8 @@ export class Wall extends DurableObject<Env> {
     return {
       settings: this.jarvis,
       facts: this.facts,
+      routines: this.routines,
+      pending: this.pendingSteps.map((p) => ({ at: p.at, routine: p.routineName, step: p.step })),
       status: {
         ready: brainReady(this.jarvis, this.env),
         workersAI: !!(this.env.AI || this.env.AI_MOCK_URL),
@@ -645,6 +790,8 @@ export class Wall extends DurableObject<Env> {
   /** Speak through the projector(s), and optionally caption it on the wall. */
   private async say(text: string) {
     if (!text || this.jarvis.voice === 'off') return;
+    // Class mode: stay quiet while a class is on.
+    if (this.jarvis.classMode.enabled && this.jarvis.classMode.quiet && this.live.classNow) return;
     if (this.jarvis.captions) {
       const now = Date.now();
       const seconds = Math.max(4, Math.min(20, Math.round(text.split(/\s+/).length * 0.45) + 2));
@@ -655,6 +802,16 @@ export class Wall extends DurableObject<Env> {
     if (!this.ctx.getWebSockets('display').length) return; // nobody to hear it
     const speech = await synthesize(this.jarvis, this.env, text);
     this.broadcast({ t: 'speak', text, audio: speech ? speech.audio : null, mime: speech ? speech.mime : 'audio/mpeg' });
+  }
+
+  private logLine(source: string, input: string, reply: string, ok: boolean) {
+    this.commandLog = [{ at: Date.now(), source, input, type: source, ok, reply }, ...this.commandLog].slice(0, COMMAND_LOG_SIZE);
+    const logMsg = JSON.stringify({ t: 'commandLog', entries: this.commandLog } satisfies ServerMessage);
+    for (const ws of this.ctx.getWebSockets('editor')) {
+      try {
+        ws.send(logMsg);
+      } catch (e) {}
+    }
   }
 
   /** Something Jarvis says on its own (timer done, event soon). Logged like a command. */
@@ -677,6 +834,8 @@ export class Wall extends DurableObject<Env> {
       announcedEvents: this.announcedEvents,
       lastBriefingDate: this.lastBriefingDate,
       briefingPendingUntil: this.briefingPendingUntil,
+      announcedDeadlines: this.announcedDeadlines,
+      classState: this.classState,
     });
   }
 
@@ -695,9 +854,13 @@ export class Wall extends DurableObject<Env> {
 
   /** When the next announcement is due (Infinity if none). */
   private nextAnnouncementAt(): number {
-    if (this.jarvis.voice === 'off' && !this.jarvis.captions) return Infinity;
     const now = Date.now();
-    let next = Infinity;
+    // These run whether or not Jarvis speaks: routine steps and class mode.
+    let next = this.pendingSteps.length ? this.pendingSteps[0].at : Infinity;
+    next = Math.min(next, this.classTimes(now).nextBoundary);
+    if (this.jarvis.voice === 'off' && !this.jarvis.captions) return next;
+    const dlead = this.jarvis.deadlineLeadHours * 3600000;
+    for (const [, due] of this.deadlineReminders()) if (due > now) next = Math.min(next, Math.max(now, due - dlead));
     const t = this.live.timer;
     if (this.jarvis.announceTimers && t && t.status === 'running' && !t.pomodoro && t.endsAt > this.announcedTimerEnd) next = Math.min(next, t.endsAt);
     const lead = this.jarvis.eventLeadMinutes * 60000;
@@ -710,8 +873,33 @@ export class Wall extends DurableObject<Env> {
   }
 
   private async checkAnnouncements(now: number) {
+    // Routine steps whose wait is over.
+    const due = this.pendingSteps.filter((p) => p.at <= now + 500);
+    if (due.length) {
+      this.pendingSteps = this.pendingSteps.filter((p) => p.at > now + 500);
+      await this.ctx.storage.put('jarvis:pending', this.pendingSteps);
+      for (const p of due) {
+        const res = await this.runStep(p.step, now);
+        if (res.spoken) await this.announce(res.spoken);
+        else this.logLine('routine', p.routineName + ': ' + p.step.value, res.problem || 'Done.', !res.problem);
+      }
+    }
+    await this.syncClassMode(now);
     if (this.jarvis.voice === 'off' && !this.jarvis.captions) return;
     let changed = false;
+    // Canvas deadlines coming up and not submitted.
+    const dlead = this.jarvis.deadlineLeadHours * 3600000;
+    for (const [id, dueAt] of this.deadlineReminders()) {
+      if (dueAt - dlead <= now && now < dueAt) {
+        const item = this.live.canvas!.items.find((i) => i.id === id)!;
+        this.announcedDeadlines = [...this.announcedDeadlines, id].slice(-200);
+        changed = true;
+        const hours = (dueAt - now) / 3600000;
+        const when = hours < 1 ? Math.max(1, Math.round(hours * 60)) + ' minutes' : Math.round(hours) + (Math.round(hours) === 1 ? ' hour' : ' hours');
+        const course = item.course ? ' for ' + item.course.replace(/\s*[-–:(].*$/, '') : '';
+        await this.announce('Heads up: ' + item.title + course + ' is due in ' + when + ', and it isn’t submitted yet.');
+      }
+    }
     // Timer finished (plain timers; Pomodoro phases are announced as they roll over).
     const t = this.live.timer;
     if (this.jarvis.announceTimers && t && t.status === 'running' && !t.pomodoro && t.endsAt <= now && t.endsAt > this.announcedTimerEnd) {

@@ -52,6 +52,8 @@ interface EditorState {
   lastAt: number;
   gestureStart: Project | null;
   error: string | null;
+  /** A short message with an optional Undo (e.g. after deleting a layer). */
+  notice: { text: string; undo?: boolean; at: number } | null;
 
   set(partial: Partial<EditorState>): void;
   /** Replace the project from the server (no history, no echo). */
@@ -84,6 +86,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   lastAt: 0,
   gestureStart: null,
   error: null,
+  notice: null,
 
   set: (partial) => set(partial),
 

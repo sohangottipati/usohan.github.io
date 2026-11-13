@@ -6,6 +6,9 @@ import { playSpeech } from '../shared/widgets/util';
 import { api } from './api';
 import { LocationInput } from './SettingsForm';
 import { sendCommand, useEditor } from './store';
+import { useDelayed } from './useDelayed';
+import RoutinesEditor from './RoutinesEditor';
+import type { Routine } from '../shared/jarvis';
 import css from './editor.module.css';
 
 interface Status {
@@ -30,6 +33,12 @@ export default function JarvisPanel() {
   const [note, setNote] = useState('');
   const [tryText, setTryText] = useState('');
   const [facts, setFacts] = useState<MemoryFact[]>([]);
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  // Select the project itself (stable reference); deriving a new array inside the selector re-renders forever.
+  const project = useEditor((st) => st.project);
+  const scenes = project ? project.scenes.map((sc) => sc.name) : [];
+  // Busy labels appear only if the wait is noticeable.
+  const showBusy = useDelayed(!!busy);
 
   const load = () =>
     api('/api/jarvis')
@@ -38,6 +47,7 @@ export default function JarvisPanel() {
         setDraft(d.settings);
         setStatus(d.status);
         setFacts(d.facts || []);
+        setRoutines(d.routines || []);
         setError(null);
       })
       .catch((e) => setError(e.message));
@@ -186,7 +196,7 @@ export default function JarvisPanel() {
         </label>
         <div className={css.row}>
           <button onClick={testVoice} disabled={!!busy}>
-            {busy === 'voice' ? 'Speaking…' : 'Test voice'}
+            {busy === 'voice' && showBusy ? 'Speaking…' : 'Test voice'}
           </button>
         </div>
         <p className={css.help}>The projector plays sound after one press of a remote button. Free voice: MeloTTS on Workers AI.</p>
@@ -201,10 +211,60 @@ export default function JarvisPanel() {
         <label className={css.checkRow}>
           <input type="checkbox" checked={draft.announceEvents} onChange={(e) => set({ announceEvents: e.target.checked })} />
           <span>Calendar events, </span>
-          <input className={css.input} style={{ width: 56 }} type="number" min={1} max={120} value={draft.eventLeadMinutes} onChange={(e) => set({ eventLeadMinutes: +e.target.value })} />
+          <input className={css.input} style={{ width: 56, flex: 'none' }} type="number" min={1} max={120} value={draft.eventLeadMinutes} onChange={(e) => set({ eventLeadMinutes: +e.target.value })} />
           <span>min before</span>
         </label>
+        <label className={css.checkRow}>
+          <input type="checkbox" checked={draft.announceDeadlines} onChange={(e) => set({ announceDeadlines: e.target.checked })} />
+          <span>Canvas deadlines, </span>
+          <input className={css.input} style={{ width: 56, flex: 'none' }} type="number" min={1} max={72} value={draft.deadlineLeadHours} onChange={(e) => set({ deadlineLeadHours: +e.target.value })} />
+          <span>h before, if not submitted</span>
+        </label>
       </section>
+
+      <section className={css.section}>
+        <h3 className={css.h3}>Class mode</h3>
+        <label className={css.checkRow}>
+          <input type="checkbox" checked={draft.classMode.enabled} onChange={(e) => set({ classMode: { ...draft.classMode, enabled: e.target.checked } })} />
+          <span>When a class starts on my calendar…</span>
+        </label>
+        {draft.classMode.enabled && (
+          <>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>Switch to scene</span>
+              <select className={css.input} value={draft.classMode.scene} onChange={(e) => set({ classMode: { ...draft.classMode, scene: e.target.value } })}>
+                <option value="">Don&apos;t switch</option>
+                {scenes.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <span className={css.help}>It switches back afterwards, unless you changed the scene during class.</span>
+            </label>
+            <label className={css.checkRow}>
+              <input type="checkbox" checked={draft.classMode.quiet} onChange={(e) => set({ classMode: { ...draft.classMode, quiet: e.target.checked } })} />
+              <span>{draft.name} stays quiet during class</span>
+            </label>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>Class calendars (comma-separated names)</span>
+              <input
+                className={css.input}
+                placeholder="e.g. School, UCR"
+                value={draft.classMode.calendars}
+                onChange={(e) => set({ classMode: { ...draft.classMode, calendars: e.target.value } })}
+              />
+            </label>
+            <label className={css.checkRow}>
+              <input type="checkbox" checked={draft.classMode.courseCodes} onChange={(e) => set({ classMode: { ...draft.classMode, courseCodes: e.target.checked } })} />
+              <span>Also count events named like a course (&quot;CS 100&quot;, &quot;MATH 10A&quot;)</span>
+            </label>
+            <p className={css.help}>Add a <b>Class</b> layer to show the class, time left, and the next one.</p>
+          </>
+        )}
+      </section>
+
+      <RoutinesEditor initial={routines} />
 
       <section className={css.section}>
         <h3 className={css.h3}>Morning briefing</h3>
@@ -239,7 +299,7 @@ export default function JarvisPanel() {
               setBusy('');
             }
           }}>
-            {busy === 'brief' ? 'Thinking…' : 'Brief me now'}
+            {busy === 'brief' && showBusy ? 'Thinking…' : 'Brief me now'}
           </button>
         </div>
       </section>
@@ -255,7 +315,7 @@ export default function JarvisPanel() {
         >
           <input className={css.input} value={tryText} placeholder="my pizza's done in like 12 minutes" onChange={(e) => setTryText(e.target.value)} />
           <button type="submit" disabled={!!busy || !tryText.trim() || dirty} title={dirty ? 'Save first' : undefined}>
-            {busy === 'try' ? '…' : 'Ask'}
+            {busy === 'try' && showBusy ? '…' : 'Ask'}
           </button>
         </form>
         <p className={css.help}>
@@ -269,7 +329,7 @@ export default function JarvisPanel() {
       <div className={css.saveBar}>
         <span className={note.indexOf('⚠') === 0 ? css.replyBad : css.replyOk}>{note}</span>
         <button className={css.primary} disabled={!dirty || busy === 'save'} onClick={save}>
-          {busy === 'save' ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+          {busy === 'save' && showBusy ? 'Saving…' : dirty || busy === 'save' ? 'Save' : 'Saved'}
         </button>
       </div>
     </>,

@@ -68,8 +68,10 @@ export function deleteLayer(id: string) {
       return;
     }
   }
+  const name = st.project ? (activeScene(st.project).layers.find((l) => l.id === id) || { name: 'layer' }).name : 'layer';
   st.updateLayers((layers) => layers.filter((l) => l.id !== id));
   st.select(null);
+  st.set({ notice: { text: 'Deleted ' + name, undo: true, at: Date.now() } });
 }
 
 /** Share the selected layer with other scenes, or unshare it. */
