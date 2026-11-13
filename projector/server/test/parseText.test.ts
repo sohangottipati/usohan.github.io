@@ -69,6 +69,12 @@ check('set the volume to forty', { type: 'spotify.volume', payload: { percent: 4
 check('pause', { type: 'spotify.pause' });
 check('pause the music', { type: 'spotify.pause' });
 check('play music', { type: 'spotify.play' });
+check("what's playing", { type: 'spotify.status' });
+check('what song is this', { type: 'spotify.status' });
+check('turn it up', { type: 'spotify.volume', payload: { delta: 10 } });
+check('volume down', { type: 'spotify.volume', payload: { delta: -10 } });
+check('louder', { type: 'spotify.volume', payload: { delta: 10 } });
+check('turn the volume up', { type: 'spotify.volume', payload: { delta: 10 } });
 
 // messages
 check('say dinner is ready', { type: 'text.say', payload: { text: 'dinner is ready', seconds: 10 } });

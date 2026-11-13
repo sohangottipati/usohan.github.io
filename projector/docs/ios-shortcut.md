@@ -44,7 +44,7 @@ Duplicate the shortcut, delete **Dictate Text**, and set the `text` field to fix
 | say dinner is ready · show Happy Birthday for 30 seconds | Shows a message on the wall (10 s by default) |
 | blackout · turn off the wall · go dark / wake up · turn on | Blacks out the projector / brings it back |
 | focus mode · switch to party scene | Switches scene (once you've made scenes) |
-| skip the song · previous song · pause · play · volume 40 | Spotify (milestone 4) |
+| skip the song · previous song · pause · play · volume 40 · turn it up · what's playing | Spotify (see [spotify.md](spotify.md)) |
 | add buy milk to my list · remind me to … · complete buy milk | To-dos (milestone 5) |
 
 "Wall", "Hey Siri", "please" and punctuation are ignored, and numbers can be digits or words. The phrases live in [`projector/server/src/commands/parseText.ts`](../server/src/commands/parseText.ts); add a rule there to teach it new ones.
@@ -90,7 +90,8 @@ The reply is always JSON:
 | `text.say` | `{ "text", "seconds"? }` (1–3600, default 10) |
 | `display.blackout` · `display.wake` | — |
 | `scene.set` | `{ "name" }` (case-insensitive, prefix match is fine) |
-| `spotify.next` · `spotify.previous` · `spotify.play` · `spotify.pause` · `spotify.volume { "percent" }` | Milestone 4 |
+| `spotify.next` · `spotify.previous` · `spotify.play` · `spotify.pause` · `spotify.status` | — |
+| `spotify.volume` | `{ "percent" }` or `{ "delta": 10 }` |
 | `todo.add { "text", "due"? }` · `todo.complete { "text" }` or `{ "id" }` | Milestone 5 |
 
 ### curl

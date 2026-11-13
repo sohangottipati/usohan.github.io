@@ -43,7 +43,7 @@ interface EditorState {
   selectedCorner: number | null;
   mode: 'layers' | 'keystone';
   /** Right-hand panel: layer/canvas properties, or the command tools. */
-  panel: 'props' | 'commands';
+  panel: 'props' | 'commands' | 'integrations';
   commandLog: CommandLogEntry[];
   guides: Guide[];
   past: Project[];

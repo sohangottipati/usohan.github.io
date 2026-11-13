@@ -234,9 +234,21 @@ const RULES: Rule[] = [
     build: () => ({ type: 'spotify.previous' }),
   },
   {
+    example: "what's playing",
+    test: /\bwhat('s| is)? (playing|this song|the song|song is this)\b|\bwhat song\b|\bwho is this\b|\bwho sings\b/,
+    build: () => ({ type: 'spotify.status' }),
+  },
+  {
+    example: 'turn it up',
+    test: /^(turn (it|the music|this|spotify) (up|down)|louder|quieter|softer|crank it|volume (up|down))$/,
+    build: (t) => ({ type: 'spotify.volume', payload: { delta: /up|louder|crank/.test(t) ? 10 : -10 } }),
+  },
+  {
     example: 'volume 40',
     test: /\bvolume\b/,
     build: (t) => {
+      if (/\b(up|louder|raise|increase)\b/.test(t) && !/\d/.test(t)) return { type: 'spotify.volume', payload: { delta: 10 } };
+      if (/\b(down|quieter|lower|decrease)\b/.test(t) && !/\d/.test(t)) return { type: 'spotify.volume', payload: { delta: -10 } };
       const m = /(\d+)/.exec(t);
       if (m) return { type: 'spotify.volume', payload: { percent: Math.max(0, Math.min(100, +m[1])) } };
       const n = /volume (?:to )?([a-z -]+?)(?: percent)?$/.exec(t);

@@ -90,4 +90,7 @@ You can deploy to `projector-wall.<you>.workers.dev` by commenting out `routes` 
 | `ALLOWED_ORIGINS` (var in `wrangler.toml`) | Origins allowed to use the editor cookie. |
 | `COMMAND_TOKEN` (optional) | Bearer token for `/api/command`. If unset, one is generated on first use; see it, copy it and rotate it in the editor's **Commands** panel. See [ios-shortcut.md](ios-shortcut.md). |
 
-`SPOTIFY_*` and `GOOGLE_*` arrive with later milestones.
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | From your Spotify developer app. See [spotify.md](spotify.md). |
+| `API_ORIGIN` (var in `wrangler.toml`) | Public address of the API, used for the Spotify redirect URI. |
+
+`GOOGLE_*` arrives with milestone 5.

@@ -148,12 +148,7 @@ export function runCommand(cmd: Command, st: CommandState): CommandOutcome {
     }
 
     // ---------- coming in later milestones ----------
-    case 'spotify.next':
-    case 'spotify.previous':
-    case 'spotify.play':
-    case 'spotify.pause':
-    case 'spotify.volume':
-      return fail("Spotify isn't connected yet.");
+    // (spotify.* commands are run by integrations/spotify.ts, not here.)
     case 'todo.add':
     case 'todo.complete':
       return fail("To-dos aren't set up yet.");

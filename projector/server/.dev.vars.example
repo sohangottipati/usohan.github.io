@@ -2,3 +2,8 @@
 EDITOR_PASSWORD=change-me
 SESSION_SECRET=replace-with-a-long-random-string
 DISPLAY_KEY=local-display-key
+
+# Optional, for Spotify (see projector/docs/spotify.md). Add this redirect URI to
+# your Spotify app for local dev: http://127.0.0.1:8787/api/spotify/callback
+# SPOTIFY_CLIENT_ID=
+# SPOTIFY_CLIENT_SECRET=

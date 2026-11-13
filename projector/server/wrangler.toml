@@ -9,6 +9,8 @@ routes = [{ pattern = "projector-api.sohan.website", custom_domain = true }]
 
 [vars]
 ALLOWED_ORIGINS = "https://sohan.website,https://www.sohan.website,http://localhost:3000"
+# Where this API is reachable; Spotify redirects back to API_ORIGIN/api/spotify/callback.
+API_ORIGIN = "https://projector-api.sohan.website"
 
 [[durable_objects.bindings]]
 name = "WALL"
@@ -21,3 +23,4 @@ new_sqlite_classes = ["Wall"]
 
 # Secrets (set with `npx wrangler secret put NAME`, or .dev.vars locally):
 #   EDITOR_PASSWORD, SESSION_SECRET, DISPLAY_KEY
+#   SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET (see projector/docs/spotify.md)

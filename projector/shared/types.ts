@@ -81,6 +81,41 @@ export interface MessageState {
   until: number;
 }
 
+export interface SpotifyTrack {
+  id: string;
+  name: string;
+  artists: string;
+  album: string;
+  /** ~300px album art URL, or '' */
+  art: string;
+  durationMs: number;
+  kind: 'track' | 'episode';
+}
+
+/**
+ * Spotify now-playing, pushed by the server. Clients interpolate progress
+ * from (progressMs, at) while playing instead of receiving every tick.
+ */
+export interface SpotifyState {
+  connected: boolean;
+  track: SpotifyTrack | null;
+  isPlaying: boolean;
+  progressMs: number;
+  /** Server time progressMs was sampled at. */
+  at: number;
+  volume: number | null;
+  device: string;
+  /** Last problem talking to Spotify, for the editor. */
+  error: string | null;
+}
+
+/** Playback position at server time `now`. */
+export function spotifyProgress(s: SpotifyState, now: number): number {
+  if (!s.track) return 0;
+  const p = s.isPlaying ? s.progressMs + (now - s.at) : s.progressMs;
+  return Math.max(0, Math.min(s.track.durationMs, p));
+}
+
 /**
  * Shared live state, synced from the server to every client. Integrations
  * (Spotify, to-dos...) add their own keys in later milestones.
@@ -90,6 +125,8 @@ export interface LiveState {
   blackout: boolean;
   timer: TimerState;
   message: MessageState | null;
+  /** null when Spotify isn't connected. */
+  spotify?: SpotifyState | null;
   [key: string]: any;
 }
 

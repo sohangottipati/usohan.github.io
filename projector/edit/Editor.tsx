@@ -6,6 +6,7 @@ import { api } from './api';
 import { setServerTime } from '../shared/live';
 import type { CommandResult, Project, ServerMessage } from '../shared/types';
 import CommandsPanel from './CommandsPanel';
+import IntegrationsPanel from './IntegrationsPanel';
 import { moveQuad, nudgeCorner } from './geometry';
 import { deleteLayer, duplicateLayer, LayerPanel, PropertiesPanel } from './Panels';
 import Stage from './Stage';
@@ -180,6 +181,19 @@ function Workspace() {
 
   useKeyboard();
 
+  // Coming back from Spotify's login page: show the result and the Integrations panel.
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    const result = q.get('spotify');
+    if (!result) return;
+    const message = q.get('message') || '';
+    useEditor.getState().set({ panel: 'integrations', error: result === 'error' ? message || 'Could not connect Spotify.' : null });
+    q.delete('spotify');
+    q.delete('message');
+    const rest = q.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : ''));
+  }, []);
+
   if (!project) return <div className={css.center}>{error || 'Loading project…'}</div>;
 
   return (
@@ -188,7 +202,13 @@ function Workspace() {
       <div className={css.main}>
         <LayerPanel />
         <Stage />
-        {panel === 'commands' ? <CommandsPanel /> : <PropertiesPanel displayKey={displayKey} onRotateKey={rotateKey} />}
+        {panel === 'commands' ? (
+          <CommandsPanel />
+        ) : panel === 'integrations' ? (
+          <IntegrationsPanel />
+        ) : (
+          <PropertiesPanel displayKey={displayKey} onRotateKey={rotateKey} />
+        )}
       </div>
       {error && (
         <div className={css.toast} onClick={() => useEditor.getState().set({ error: null })}>
@@ -261,6 +281,9 @@ function Toolbar() {
         </Toggle>
         <Toggle on={panel === 'commands'} onClick={() => st.set({ panel: panel === 'commands' ? 'props' : 'commands' })} title="Voice / command API, timer, log">
           Commands
+        </Toggle>
+        <Toggle on={panel === 'integrations'} onClick={() => st.set({ panel: panel === 'integrations' ? 'props' : 'integrations' })} title="Spotify, weather, Google">
+          Integrations
         </Toggle>
       </div>
       <div className={css.spacer} />
