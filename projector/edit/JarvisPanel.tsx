@@ -44,7 +44,7 @@ export default function JarvisPanel() {
     load();
   }, []);
 
-  if (error) return aside(<p className={css.errorText}>{error.indexOf('404') >= 0 || error === 'Not found' ? 'The wall API is on older code without Jarvis. Run git pull && npm run deploy in projector/server.' : error}</p>);
+  if (error) return aside(<p className={css.errorText}>{error.indexOf('404') >= 0 || error === 'Not found' ? 'The wall API is on older code without Jarvis. Run git pull && npm install && npm run deploy in projector/server.' : error}</p>);
   if (!draft || !status) return aside(<p className={css.muted}>Loading…</p>);
 
   const set = (patch: Partial<JarvisSettings>) => setDraft({ ...draft, ...patch });
@@ -251,7 +251,7 @@ function aside(children: React.ReactNode) {
 
 function StatusLine({ draft, saved, status }: { draft: JarvisSettings; saved: JarvisSettings; status: Status }) {
   if (draft.provider === 'off') return <p className={css.help}>Only the built-in phrases work (see the Commands panel). Turn on a brain for anything else.</p>;
-  if (draft.provider === 'workers-ai' && !status.workersAI) return <p className={css.replyBad}>Workers AI isn&apos;t available on the server. Redeploy the API (git pull && npm run deploy).</p>;
+  if (draft.provider === 'workers-ai' && !status.workersAI) return <p className={css.replyBad}>Workers AI isn&apos;t available on the server. Redeploy the API (git pull && npm install && npm run deploy).</p>;
   if (draft.provider === 'claude' && !status.claudeKey)
     return (
       <p className={css.replyBad}>

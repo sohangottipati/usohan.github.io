@@ -30,7 +30,7 @@ You can check how much of the free allowance you've used in the Cloudflare dashb
 
 1. Deploy the latest API. The `[ai]` binding in `wrangler.toml` turns Workers AI on; there's nothing else to sign up for.
    ```bash
-   cd ~/usohan.github.io/projector/server && git pull && npm run deploy
+   cd ~/usohan.github.io/projector/server && git pull && npm install && npm run deploy
    ```
 2. Editor → **Jarvis** → Brain: **Workers AI** → **Save**. The status should say **Ready**.
 3. Try "my pizza's done in like 12 minutes" in the **Try it** box.
