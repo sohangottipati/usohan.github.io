@@ -274,17 +274,6 @@ export class Wall extends DurableObject<Env> {
     if (this.tokenFailures.length >= TOKEN_FAILURE_LIMIT) {
       return json({ ok: false, reply: 'Too many bad tokens. Try again in a minute.' }, 429);
     }
-    const auth = req.headers.get('Authorization') || '';
-    const token = /^Bearer\s+(.+)$/i.exec(auth);
-    if (!token || !safeEqual(token[1].trim(), this.commandToken)) {
-      this.tokenFailures.push(now);
-      return json({ ok: false, reply: 'Wrong or missing command token.' }, 401);
-    }
-    this.commandTimes = this.commandTimes.filter((t) => now - t < 60000);
-    if (this.commandTimes.length >= COMMAND_RATE) {
-      return json({ ok: false, reply: 'Slow down: too many commands this minute.' }, 429);
-    }
-    this.commandTimes.push(now);
 
     // JSON {type, payload} or {text}, or a plain-text body (handy from Shortcuts and curl).
     let body: any = null;
@@ -294,6 +283,25 @@ export class Wall extends DurableObject<Env> {
       body = { text: raw };
     }
     if (typeof body === 'string') body = { text: body };
+
+    // The token can come as "Authorization: Bearer <token>" (also forgiven without "Bearer"),
+    // or as a "token" field in the JSON body, which is easier to set up in Shortcuts.
+    const header = (req.headers.get('Authorization') || '').trim();
+    const fromHeader = header.replace(/^Bearer\s+/i, '').trim();
+    const fromBody = body && typeof body.token === 'string' ? body.token.trim() : '';
+    const given = fromHeader || fromBody;
+    if (!given) {
+      return json({ ok: false, reply: 'No command token was sent. Add the token to the shortcut, as an Authorization header or a token field.' }, 401);
+    }
+    if (!safeEqual(given, this.commandToken)) {
+      this.tokenFailures.push(now);
+      return json({ ok: false, reply: "That command token is wrong. Copy it again from the editor's Commands panel." }, 401);
+    }
+    this.commandTimes = this.commandTimes.filter((t) => now - t < 60000);
+    if (this.commandTimes.length >= COMMAND_RATE) {
+      return json({ ok: false, reply: 'Slow down: too many commands this minute.' }, 429);
+    }
+    this.commandTimes.push(now);
     if (!body || typeof body !== 'object') return json({ ok: false, reply: 'Send {"text": "..."} or {"type": "...", "payload": {...}}.' }, 400);
     const result = await this.execute('api', body.text, body.type ? { type: String(body.type), payload: body.payload } : undefined, {
       speak: body.voice === 'wall',

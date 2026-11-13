@@ -21,7 +21,7 @@ From the editor at https://sohan.website/projector/edit, open **Commands** in th
    - Replace `URL` with `https://projector-api.sohan.website/api/command`.
    - Tap the arrow to show more options:
      - **Method:** `POST`
-     - **Headers:** **Add new header**, key `Authorization`, text `Bearer YOUR_TOKEN` (the word *Bearer*, a space, then the token you copied).
+     - **Token (pick one):** either **Headers → Add new header** with key `Authorization` and text `Bearer YOUR_TOKEN` (the word *Bearer*, a space, then the token), or, simpler, add a second **Text** field to the JSON body below with key `token` and your token as the value.
      - **Request Body:** `JSON`. **Add new field → Text**, key `text`. For the value, tap it and choose the **Dictated Text** variable.
 4. **Add Action → Get Dictionary Value.** Set it to *Get* **Value** *for* `reply` *in* **Contents of URL**.
 5. **Add Action → Speak Text**, with **Dictionary Value** as the text. (Use **Show Result** instead if you'd rather read it than hear it.)
