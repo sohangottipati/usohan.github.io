@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiBase, WallSocket } from '../shared/client';
+import { api } from './api';
 import { setServerTime } from '../shared/live';
 import type { Project, ServerMessage } from '../shared/types';
 import { moveQuad, nudgeCorner } from './geometry';
@@ -11,17 +12,6 @@ import { selectedLayer, setSenders, useEditor } from './store';
 import css from './editor.module.css';
 
 const SEND_INTERVAL_MS = 40;
-
-async function api(path: string, init: RequestInit = {}) {
-  const res = await fetch(apiBase() + path, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
-}
 
 export default function Editor() {
   const authed = useEditor((s) => s.authed);

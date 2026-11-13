@@ -1,13 +1,44 @@
 import type { Command, LiveState, Size } from '../types';
 
-export type SettingsField =
-  | { key: string; label: string; type: 'text'; multiline?: boolean; placeholder?: string; help?: string }
-  | { key: string; label: string; type: 'number'; min?: number; max?: number; step?: number; help?: string }
-  | { key: string; label: string; type: 'color'; help?: string }
-  | { key: string; label: string; type: 'select'; options: { value: string; label: string }[]; help?: string }
-  | { key: string; label: string; type: 'toggle'; help?: string }
-  | { key: string; label: string; type: 'font'; help?: string }
-  | { key: string; label: string; type: 'image'; help?: string };
+/** Show a field only when another setting has one of these values. */
+export interface FieldCondition {
+  key: string;
+  is: any[];
+}
+
+interface FieldBase {
+  key: string;
+  label: string;
+  help?: string;
+  when?: FieldCondition;
+}
+
+export type SettingsField = FieldBase &
+  (
+    | { type: 'text'; multiline?: boolean; placeholder?: string }
+    | { type: 'number'; min?: number; max?: number; step?: number }
+    | { type: 'color' }
+    | { type: 'select'; options: { value: string; label: string }[] }
+    | { type: 'toggle' }
+    | { type: 'font' }
+    /** URL string. The editor also offers an upload button (images are stored by the wall API). */
+    | { type: 'image' }
+    /** A LocationValue. The editor offers a place search (Open-Meteo geocoding). */
+    | { type: 'location' }
+  );
+
+export interface LocationValue {
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+export const DEFAULT_LOCATION: LocationValue = { name: 'Riverside, CA', lat: 33.9533, lon: -117.3962 };
+
+/** True if a field's `when` condition passes for these settings. */
+export function fieldVisible(f: SettingsField, settings: Record<string, any>): boolean {
+  return !f.when || f.when.is.indexOf(settings[f.when.key]) >= 0;
+}
 
 export interface Theme {
   fontFamily: string;
@@ -70,4 +101,6 @@ export const FONT_OPTIONS: { value: string; label: string }[] = [
   { value: "'Courier New', Courier, monospace", label: 'Mono' },
   { value: "'Trebuchet MS', Verdana, sans-serif", label: 'Rounded' },
   { value: "Impact, 'Arial Black', sans-serif", label: 'Heavy' },
+  { value: "'Avenir Next', Avenir, 'Segoe UI', Roboto, sans-serif", label: 'Geometric' },
+  { value: "'Palatino Linotype', Palatino, 'Book Antiqua', serif", label: 'Book' },
 ];

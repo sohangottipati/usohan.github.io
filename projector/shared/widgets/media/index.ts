@@ -20,7 +20,7 @@ export const mediaWidget: WidgetDefinition<MediaSettings> = {
   defaultSize: { w: 640, h: 360 },
   defaultSettings: { url: '', kind: 'auto', fit: 'cover', loop: true },
   settingsSchema: [
-    { key: 'url', label: 'Image or video URL', type: 'image', help: 'Paste a direct link to a .jpg, .png, .gif, .mp4 or .webm.' },
+    { key: 'url', label: 'Image or video URL', type: 'image', help: 'Upload an image, or paste a direct link to a .jpg, .png, .gif, .mp4 or .webm.' },
     {
       key: 'kind',
       label: 'Type',
@@ -41,7 +41,7 @@ export const mediaWidget: WidgetDefinition<MediaSettings> = {
         { value: 'fill', label: 'Stretch' },
       ],
     },
-    { key: 'loop', label: 'Loop video', type: 'toggle' },
+    { key: 'loop', label: 'Loop video', type: 'toggle', when: { key: 'kind', is: ['auto', 'video'] } },
   ],
   mount(el, ctx) {
     const s = ctx.settings;

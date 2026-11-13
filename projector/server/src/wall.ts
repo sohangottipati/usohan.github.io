@@ -13,6 +13,9 @@ type Role = 'editor' | 'display';
 const PERSIST_INTERVAL_MS = 1000;
 const MAX_MESSAGE_BYTES = 1024 * 1024;
 const LOGIN_MAX_FAILURES = 5;
+const MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+// SQLite-backed Durable Object values are capped at 2 MB.
+const MAX_MEDIA_BYTES = 1.9 * 1024 * 1024;
 const LOGIN_LOCK_MS = 5 * 60 * 1000;
 
 function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -54,6 +57,10 @@ export class Wall extends DurableObject<Env> {
 
     if (path === '/ws') return this.handleSocket(req, url);
 
+    // Uploaded images are public (unguessable ids) so the projector can load them in <img>.
+    const media = /^\/api\/media\/([A-Za-z0-9_-]{8,40})$/.exec(path);
+    if (media && req.method === 'GET') return this.getMedia(media[1]);
+
     if (path === '/api/login' && req.method === 'POST') return this.login(req);
     if (path === '/api/logout' && req.method === 'POST') {
       return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0, isLocalDev(this.env)) });
@@ -76,8 +83,37 @@ export class Wall extends DurableObject<Env> {
       return json({ key: this.displayKey });
     }
     if (path === '/api/project' && req.method === 'GET') return json(this.project);
+    if (path === '/api/media' && req.method === 'POST') return this.putMedia(req);
 
     return json({ ok: false, error: 'Not found' }, 404);
+  }
+
+  // ---------- media ----------
+
+  private async putMedia(req: Request): Promise<Response> {
+    const type = (req.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+    // No SVG: it can carry script and would be served from the API's origin.
+    if (MEDIA_TYPES.indexOf(type) < 0) return json({ ok: false, error: 'Only PNG, JPEG, WebP or GIF images' }, 415);
+    const data = await req.arrayBuffer();
+    if (data.byteLength === 0) return json({ ok: false, error: 'Empty upload' }, 400);
+    if (data.byteLength > MAX_MEDIA_BYTES) return json({ ok: false, error: 'Image must be under 1.9 MB' }, 413);
+    const id = randomToken(16);
+    await this.ctx.storage.put('media:' + id, { type, data, size: data.byteLength, createdAt: Date.now() });
+    return json({ ok: true, id, path: '/api/media/' + id });
+  }
+
+  private async getMedia(id: string): Promise<Response> {
+    const m = (await this.ctx.storage.get('media:' + id)) as { type: string; data: ArrayBuffer } | undefined;
+    if (!m) return new Response('Not found', { status: 404 });
+    return new Response(m.data, {
+      headers: {
+        'Content-Type': m.type,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'",
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
   }
 
   private originAllowed(req: Request): boolean {
