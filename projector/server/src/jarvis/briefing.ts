@@ -5,7 +5,7 @@
 import type { JarvisSettings } from '../../../shared/jarvis';
 import type { LiveState } from '../../../shared/types';
 import type { Env } from '../env';
-import { write } from './brain';
+import { write, type UsageSink } from './brain';
 import { clockTime, localDate } from './time';
 
 const WMO: { [code: number]: string } = {
@@ -33,7 +33,7 @@ async function weatherLine(s: JarvisSettings, env: Env): Promise<string | null> 
   }
 }
 
-export async function composeBriefing(s: JarvisSettings, env: Env, live: LiveState, now: number, extra: string[] = []): Promise<string> {
+export async function composeBriefing(s: JarvisSettings, env: Env, live: LiveState, now: number, extra: string[] = [], track?: UsageSink): Promise<string> {
   const tz = s.timeZone;
   const today = localDate(now, tz);
   const facts: string[] = [];
@@ -69,6 +69,7 @@ export async function composeBriefing(s: JarvisSettings, env: Env, live: LiveSta
     env,
     'Turn these facts into a short spoken briefing (3 to 4 sentences, under 70 words). Start with a greeting suited to the time of day (' +
       greeting + '). Keep every number and name exactly. Facts:\n' + facts.join('\n'),
+    track,
   );
   return polished || plain;
 }

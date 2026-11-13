@@ -1,6 +1,8 @@
 // Shared data model for the projector wall. Used by the display, the editor
 // and the Cloudflare Worker. Keep this file dependency-free.
 
+import type { AiUsage } from './usage';
+
 export type Point = [number, number];
 /** Corners in display (canvas) pixels: top-left, top-right, bottom-right, bottom-left. */
 export type Quad = [Point, Point, Point, Point];
@@ -205,6 +207,8 @@ export interface LiveState {
   classNow?: ClassNow | null;
   /** The next class within a day (class mode), or null. */
   classNext?: ClassNow | null;
+  /** What Jarvis's AI has used today and this month (see usage.ts). */
+  aiUsage?: AiUsage | null;
   [key: string]: any;
 }
 

@@ -3,6 +3,7 @@
 
 import type { WidgetDefinition } from './types';
 import { agendaWidget } from './agenda';
+import { aiUsageWidget } from './aiUsage';
 import { calendarWidget } from './calendar';
 import { classNowWidget } from './classNow';
 import { canvasDueWidget } from './canvasDue';
@@ -34,6 +35,7 @@ const ALL: WidgetDefinition<any>[] = [
   canvasDueWidget,
   agendaWidget,
   classNowWidget,
+  aiUsageWidget,
 ];
 
 const byType: { [type: string]: WidgetDefinition<any> } = {};

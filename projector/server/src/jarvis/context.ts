@@ -1,6 +1,7 @@
 // A compact, plain-text snapshot of what the wall knows right now, so the brain
 // can answer "do I have time for a nap?" and pick sensible commands.
 
+import { isClassEvent, type ClassModeSettings } from '../../../shared/jarvis';
 import { activeScene, spotifyProgress, timerRemaining, type LiveState, type Project } from '../../../shared/types';
 import { clockTime, localDate, speakableNow } from './time';
 
@@ -9,7 +10,14 @@ function mins(ms: number): string {
   return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + ' min';
 }
 
-export function buildContext(live: LiveState, project: Project, now: number, tz: string, routineNames: string[] = []): string {
+export function buildContext(
+  live: LiveState,
+  project: Project,
+  now: number,
+  tz: string,
+  routineNames: string[] = [],
+  classMode?: ClassModeSettings,
+): string {
   const lines: string[] = [];
   lines.push('Now: ' + speakableNow(now, tz) + ' (' + tz + ')');
   if (live.classNow) lines.push('In class now: ' + live.classNow.title + ' until ' + clockTime(Date.parse(live.classNow.end), tz));
@@ -39,18 +47,20 @@ export function buildContext(live: LiveState, project: Project, now: number, tz:
 
   const cal = live.calendar;
   if (cal === undefined || cal === null) lines.push('Calendar: not connected');
+  else if (cal.error) lines.push("Calendar: connected but couldn't load (" + cal.error + '). Say so; don\'t claim the day is empty.');
   else {
     const today = localDate(now, tz);
     const upcoming = cal.events
       .filter((e) => (e.allDay ? e.end > today : Date.parse(e.end) > now))
-      .slice(0, 8)
+      .slice(0, 14)
       .map((e) => {
+        const tag = classMode && isClassEvent(e, classMode) ? ' [class]' : '';
         if (e.allDay) return '- ' + (e.start <= today ? 'today' : e.start) + ' all day: ' + e.title;
         const start = Date.parse(e.start);
         const day = localDate(start, tz) === today ? 'today' : localDate(start, tz);
-        return '- ' + day + ' ' + clockTime(start, tz) + '-' + clockTime(Date.parse(e.end), tz) + ': ' + e.title + (start <= now ? ' (happening now)' : '');
+        return '- ' + day + ' ' + clockTime(start, tz) + '-' + clockTime(Date.parse(e.end), tz) + ': ' + e.title + tag + (start <= now ? ' (happening now)' : '');
       });
-    lines.push('Calendar (upcoming):' + (upcoming.length ? '\n' + upcoming.join('\n') : ' nothing'));
+    lines.push('Calendar (next 2 days):' + (upcoming.length ? '\n' + upcoming.join('\n') : ' nothing'));
   }
 
   const todos = live.todos;
@@ -61,13 +71,15 @@ export function buildContext(live: LiveState, project: Project, now: number, tz:
     lines.push('To-dos (' + todos.items.length + ' open):' + (items.length ? '\n' + items.join('\n') : ' none'));
   }
   const cv = live.canvas;
-  if (cv && !cv.error) {
-    const open = cv.items.filter((i) => !i.submitted && i.due && Date.parse(i.due) >= now - 86400000).slice(0, 8);
+  if (cv === undefined || cv === null) lines.push('Canvas (coursework): not connected, so you know nothing about assignments.');
+  else if (cv.error) lines.push("Canvas (coursework): connected but couldn't load (" + cv.error + "). Say you couldn't reach Canvas; never say there's no work.");
+  else {
+    const open = cv.items.filter((i) => !i.submitted && i.due && Date.parse(i.due) >= now - 86400000).slice(0, 12);
     const missing = cv.items.filter((i) => i.missing && !i.submitted).slice(0, 4);
     const fmt = (iso: string) => clockTime(Date.parse(iso), tz) + ' ' + (localDate(Date.parse(iso), tz) === localDate(now, tz) ? 'today' : localDate(Date.parse(iso), tz));
     lines.push(
       'Canvas (coursework):' +
-        (open.length ? '\n' + open.map((i) => '- ' + i.title + (i.course ? ' [' + i.course + ']' : '') + ' due ' + fmt(i.due!)).join('\n') : ' nothing due soon') +
+        (open.length ? '\n' + open.map((i) => '- ' + i.title + (i.course ? ' [' + i.course + ']' : '') + ' due ' + fmt(i.due!)).join('\n') : ' nothing unsubmitted due in the next 3 weeks') +
         (missing.length ? '\nMissing: ' + missing.map((i) => i.title).join(', ') : ''),
     );
   }

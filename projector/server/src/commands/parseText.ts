@@ -172,7 +172,9 @@ const RULES: Rule[] = [
   // ----- jarvis -----
   {
     example: 'good morning',
-    test: /^(good morning|morning briefing|brief me|daily briefing|give me (a|my|the) (briefing|rundown)|what('s| does) my day look like)\b/,
+    test: /^(good morning|morning briefing|brief me|daily briefing|give me (a|my|the) (brief|briefing|rundown)|what('s| does) my day look like)\b/,
+    // "brief me on my classes" asks for something narrower: let the brain shape it.
+    loose: (t) => /\b(on|of|about|for)\b/.test(t),
     build: () => ({ type: 'jarvis.briefing' }),
   },
 

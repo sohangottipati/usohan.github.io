@@ -105,6 +105,27 @@ The **Class** layer shows "In class · CS 100 · 40 min left · MSE 104" with a 
 
 **Agenda** puts calendar events and Canvas deadlines in one list, grouped by day (Today, Tomorrow, then weekdays). Missing Canvas work goes at the top in red. Optionally it also shows to-dos that have a due date. Events happening now get a "Now" marker, and finished events fade.
 
+## AI usage layer
+
+**AI usage** shows what Jarvis has used **today** and **this month**:
+- requests, with tokens in and out
+- spoken replies and errors
+- estimated cost for Claude, plus a split between Claude and Workers AI
+
+Workers AI shows $0 because it's free up to Cloudflare's daily allowance. Claude's cost is estimated from the token counts each reply reports, at list prices:
+
+| Model | Input (per 1M tokens) | Output (per 1M tokens) |
+| --- | --- | --- |
+| Opus 5.5 | $4 | $20 |
+| Sonnet 5.5 | $2 | $10 |
+| Haiku 5.5 | $0.10 | $0.50 |
+
+Set a **monthly budget** to get a bar that turns red when you pass it. Your exact bill is in the Anthropic Console.
+
+## Answers with the projector off
+
+Calendar, to-dos and Canvas only refresh in the background while a display or the editor is open. If you ask through Siri while everything is closed, Jarvis first refetches anything older than a few minutes (waiting at most 6 seconds), so the answer uses current data. If Canvas or the calendar can't be reached, Jarvis says so rather than claiming you have nothing due.
+
 ## Memory
 
 Jarvis has three kinds of memory:

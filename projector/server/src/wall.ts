@@ -30,6 +30,7 @@ import { buildContext } from './jarvis/context';
 import type { Exchange } from './jarvis/prompt';
 import { localDate, nextDailyTime } from './jarvis/time';
 import { synthesize } from './jarvis/voice';
+import { recordUsage, type UsageEvent } from '../../shared/usage';
 import { isLocalDev, isOriginAllowed, originOk, type Env } from './env';
 import { Google } from './integrations/google';
 import { Spotify, spotifyChanged } from './integrations/spotify';
@@ -57,6 +58,8 @@ const TODOS_POLL_MS = 60 * 1000;
 // Canvas: every 15 minutes while a screen is connected.
 const CANVAS_POLL_MS = 15 * 60 * 1000;
 const CALENDAR_POLL_MS = 5 * 60 * 1000;
+/** How old Canvas data may be when Jarvis answers a question. */
+const FRESH_CANVAS_MS = 10 * 60 * 1000;
 // Jarvis: keep a few recent exchanges for follow-ups; hold a missed briefing until a display connects.
 const MEMORY_SIZE = 6;
 const BRIEFING_HOLD_MS = 4 * 3600 * 1000;
@@ -206,7 +209,7 @@ export class Wall extends DurableObject<Env> {
     }
     if (path === '/api/jarvis/test-voice' && req.method === 'POST') {
       const text = 'Voice check. This is ' + this.jarvis.name + ', at your service.';
-      const speech = await synthesize(this.jarvis, this.env, text);
+      const speech = await synthesize(this.jarvis, this.env, text, this.track);
       const displays = this.ctx.getWebSockets('display').length;
       if (speech) this.broadcast({ t: 'speak', text, audio: speech.audio, mime: speech.mime });
       return json({ ok: !!speech, text, audio: speech ? speech.audio : null, mime: speech ? speech.mime : null, displays });
@@ -528,6 +531,7 @@ export class Wall extends DurableObject<Env> {
 
   /** Runs one structured command and broadcasts what changed. */
   private async runOne(cmd: Command, now: number): Promise<CommandResult> {
+    if (/^(jarvis\.briefing|calendar\.(today|next)|canvas\.|todo\.list)/.test(cmd.type)) await this.freshen();
     if (cmd.payload !== undefined && (typeof cmd.payload !== 'object' || cmd.payload === null)) cmd = { type: cmd.type };
     let out: { result: CommandResult; live?: LiveState; project?: Project };
     if (cmd.type === 'routine.run') {
@@ -551,7 +555,7 @@ export class Wall extends DurableObject<Env> {
       if (r.facts !== this.facts) await this.saveFacts(r.facts);
       out = { result: { ok: r.ok, reply: r.reply } };
     } else if (cmd.type === 'jarvis.briefing') {
-      out = { result: { ok: true, reply: await composeBriefing(this.jarvis, this.env, this.live, now, await this.briefingExtras(now)) } };
+      out = { result: { ok: true, reply: await composeBriefing(this.jarvis, this.env, this.live, now, await this.briefingExtras(now), this.track) } };
       this.lastBriefingDate = localDate(now, this.jarvis.timeZone);
       this.briefingPendingUntil = 0;
       await this.saveJarvisState();
@@ -563,7 +567,7 @@ export class Wall extends DurableObject<Env> {
     } else if (cmd.type.indexOf('canvas.') === 0) {
       out = { result: await this.canvas.control(cmd, this.live.canvas, now, this.jarvis.timeZone) };
     } else if (cmd.type.indexOf('todo.') === 0 || cmd.type.indexOf('calendar.') === 0 || cmd.type.indexOf('email.') === 0) {
-      const r = await this.google.control(cmd, this.live, now, { summarize: (instruction) => write(this.jarvis, this.env, instruction) });
+      const r = await this.google.control(cmd, this.live, now, { summarize: (instruction) => write(this.jarvis, this.env, instruction, this.track) });
       out = { result: { ok: r.ok, reply: r.reply } };
       if (r.todos) out.live = { ...this.live, todos: r.todos };
       if (r.refreshCalendar) {
@@ -597,11 +601,37 @@ export class Wall extends DurableObject<Env> {
 
   // ---------- Jarvis ----------
 
+  /**
+   * Siri can ask while no display or editor is open, and then nothing has polled
+   * for hours. Fetch the calendar, to-dos and Canvas again if they're old, so
+   * answers come from today's data. Bounded so Siri doesn't time out.
+   */
+  private async freshen() {
+    const now = Date.now();
+    const jobs: Promise<unknown>[] = [];
+    if (now - this.lastCalendarPoll > CALENDAR_POLL_MS && (await this.google.connected())) {
+      this.lastCalendarPoll = 0;
+      jobs.push(this.pollGoogle());
+    }
+    const cv = this.live.canvas;
+    if ((!cv || cv.error || now - cv.fetchedAt > FRESH_CANVAS_MS) && (await this.canvas.connected())) jobs.push(this.pollCanvas());
+    if (!jobs.length) return;
+    await Promise.race([Promise.allSettled(jobs), new Promise((r) => setTimeout(r, 6000))]);
+    await this.syncClassMode(Date.now());
+  }
+
+  /** Counts every model call (brain, writing, voice) for the AI usage layer. */
+  private track = (e: UsageEvent) => {
+    const now = Date.now();
+    this.setLive({ aiUsage: recordUsage(this.live.aiUsage, e, localDate(now, this.jarvis.timeZone), now) });
+  };
+
   /** Ask the brain for a plan and carry it out. `fallback` is the parser's guess, used if the brain is unreachable. */
   private async askJarvis(input: string, now: number, fallback: Command | null): Promise<{ result: CommandResult; logType: string | null }> {
+    await this.freshen();
     const memory = this.memory.filter((m) => now - m.at < this.jarvis.memoryMinutes * 60000);
-    const context = buildContext(this.live, this.project, now, this.jarvis.timeZone, this.routines.map((r) => r.name));
-    const r = await think(this.jarvis, this.env, input, context, memory, this.facts);
+    const context = buildContext(this.live, this.project, now, this.jarvis.timeZone, this.routines.map((r) => r.name), this.jarvis.classMode);
+    const r = await think(this.jarvis, this.env, input, context, memory, this.facts, this.track);
     this.lastBrainMs = r.ms;
     if ('error' in r) {
       this.lastBrainError = r.error;
@@ -631,6 +661,7 @@ export class Wall extends DurableObject<Env> {
       }
     } catch (e) {}
     const c = this.live.canvas;
+    if (c && c.error) out.push("I couldn't reach Canvas, so I can't tell you what's due.");
     if (c && !c.error) {
       const soon = c.items.filter((i) => !i.submitted && i.due && Date.parse(i.due) >= now && Date.parse(i.due) <= now + 36 * 3600 * 1000);
       if (soon.length) out.push('Due on Canvas soon: ' + soon.slice(0, 3).map((i) => i.title + (i.course ? ' for ' + i.course.replace(/\s*[-–:].*$/, '') : '')).join(', ') + '.');
@@ -800,7 +831,7 @@ export class Wall extends DurableObject<Env> {
       this.dirty = true;
     }
     if (!this.ctx.getWebSockets('display').length) return; // nobody to hear it
-    const speech = await synthesize(this.jarvis, this.env, text);
+    const speech = await synthesize(this.jarvis, this.env, text, this.track);
     this.broadcast({ t: 'speak', text, audio: speech ? speech.audio : null, mime: speech ? speech.mime : 'audio/mpeg' });
   }
 

@@ -4,6 +4,7 @@
 import type { JarvisSettings } from '../../../shared/jarvis';
 import type { Env } from '../env';
 import { aiAvailable, aiRun } from './ai';
+import type { UsageSink } from './brain';
 
 export interface Speech {
   /** base64-encoded audio */
@@ -38,16 +39,20 @@ async function streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8A
 }
 
 /** Spoken audio for `text`, or null if voice isn't available. Never throws. */
-export async function synthesize(s: JarvisSettings, env: Env, text: string): Promise<Speech | null> {
+export async function synthesize(s: JarvisSettings, env: Env, text: string, track?: UsageSink): Promise<Speech | null> {
   if (!aiAvailable(env) || !text.trim()) return null;
+  const report = (ok: boolean) => track && track({ provider: 'workers-ai', model: s.voiceModel, kind: 'speech', tokensIn: 0, tokensOut: 0, ok });
   try {
     const out = await aiRun(env, s.voiceModel, { prompt: text.slice(0, 600), text: text.slice(0, 600), lang: 'en' });
-    if (out && typeof out.audio === 'string') return { audio: out.audio, mime: 'audio/mpeg' };
-    if (out instanceof ArrayBuffer) return { audio: toBase64(new Uint8Array(out)), mime: 'audio/mpeg' };
-    if (out instanceof Uint8Array) return { audio: toBase64(out), mime: 'audio/mpeg' };
-    if (out && typeof out.getReader === 'function') return { audio: toBase64(await streamToBytes(out)), mime: 'audio/mpeg' };
-    return null;
+    let speech: Speech | null = null;
+    if (out && typeof out.audio === 'string') speech = { audio: out.audio, mime: 'audio/mpeg' };
+    else if (out instanceof ArrayBuffer) speech = { audio: toBase64(new Uint8Array(out)), mime: 'audio/mpeg' };
+    else if (out instanceof Uint8Array) speech = { audio: toBase64(out), mime: 'audio/mpeg' };
+    else if (out && typeof out.getReader === 'function') speech = { audio: toBase64(await streamToBytes(out)), mime: 'audio/mpeg' };
+    report(!!speech);
+    return speech;
   } catch (e) {
+    report(false);
     return null;
   }
 }
