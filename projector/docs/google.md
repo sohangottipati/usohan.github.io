@@ -6,7 +6,32 @@ Two widgets and some voice commands, from one Google connection:
 - **To-do list:** your Google Tasks list (*My Tasks*). Overdue items show in red, and due dates show as *Today*, *Tomorrow*, *Mon* and so on.
 - **Voice:** "add buy milk to my list", "remind me to call mom tomorrow", "complete buy milk", "what's on my list", "what's on my calendar today", "what's next".
 
-The wall can read your calendar but never changes it. It can read, add and complete tasks. Your Google login stays on the server.
+The wall can read your calendar and **add events** ("add dentist next Tuesday at 3"), and it can only delete events it added itself; it never edits or deletes yours. It can read, add and complete tasks. **Gmail** is optional and read-only, for spoken inbox summaries. Your Google login stays on the server.
+
+## Adding events
+
+| Say | Does |
+|---|---|
+| add dentist next tuesday at 3 | 1-hour event, Tuesday 3 to 4 PM |
+| schedule study group on friday from 6 to 8pm | Friday 6 to 8 PM |
+| put lunch with Alex tomorrow at 12:30 on my calendar | Tomorrow 12:30 to 1:30 PM |
+| add Mom's birthday on March 3rd to my calendar | All-day event |
+| (Jarvis on) block 2 hours for the essay tomorrow afternoon | Jarvis picks the details |
+| undo that · delete the dentist event | Removes an event the wall added (never one of yours) |
+
+Jarvis reads back exactly what it added: *"Added dentist, Tuesday, November 17, 3 to 4 PM."* A bare "3" means 3 PM and "9" means 9 AM; say "am"/"pm" to be exact. Events go on your main calendar unless you name another ("on my School calendar").
+
+**Already connected before this was added?** The Integrations panel shows **Add events: No**. Click **Disconnect**, then **Connect Google** again and approve the new permission.
+
+## Gmail (optional)
+
+Tick **Also let Jarvis read my Gmail (read-only)** before **Connect Google**. Then "check my email" / "any new emails?" reads out how many unread emails are in your primary inbox (last 3 days) and who they're from. With a brain on, it's a short summary.
+
+Emails are written by other people, so they're treated as untrusted:
+- They're only ever **summarized as text**. Nothing in an email can make the wall do anything (no commands run from that path).
+- Email content never goes into the snapshot the command-running brain sees. The morning briefing only includes the unread **count**.
+
+A school (Google Workspace) account may block third-party apps from Gmail; a personal Gmail works.
 
 ## One-time setup (about 10 minutes)
 

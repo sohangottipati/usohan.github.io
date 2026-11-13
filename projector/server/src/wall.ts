@@ -21,7 +21,8 @@ import { parseTextDetailed } from './commands/parseText';
 import { defaultJarvisSettings, sanitizeJarvisSettings, type JarvisSettings, type MemoryFact } from '../../shared/jarvis';
 import { addFact, cleanFact, forgetFact, listFacts, totalChars } from './jarvis/memory';
 import { MAX_FACT_CHARS, MAX_MEMORY_CHARS } from '../../shared/jarvis';
-import { brainReady, think } from './jarvis/brain';
+import { brainReady, think, write } from './jarvis/brain';
+import { Canvas } from './integrations/canvas';
 import { composeBriefing } from './jarvis/briefing';
 import { buildContext } from './jarvis/context';
 import type { Exchange } from './jarvis/prompt';
@@ -51,6 +52,8 @@ const SPOTIFY_POLL_QUIET_MS = 30000;
 const SPOTIFY_QUIET_AFTER_MS = 10 * 60 * 1000;
 // Google: to-dos every minute, calendar every 5 minutes, while a screen is connected.
 const TODOS_POLL_MS = 60 * 1000;
+// Canvas: every 15 minutes while a screen is connected.
+const CANVAS_POLL_MS = 15 * 60 * 1000;
 const CALENDAR_POLL_MS = 5 * 60 * 1000;
 // Jarvis: keep a few recent exchanges for follow-ups; hold a missed briefing until a display connects.
 const MEMORY_SIZE = 6;
@@ -79,6 +82,8 @@ export class Wall extends DurableObject<Env> {
   private google: Google;
   private nextGooglePoll = Infinity;
   private lastCalendarPoll = 0;
+  private canvas: Canvas;
+  private nextCanvasPoll = Infinity;
   private jarvis: JarvisSettings = defaultJarvisSettings();
   private memory: Exchange[] = [];
   /** Long-term facts ("remember that…"). */
@@ -94,6 +99,7 @@ export class Wall extends DurableObject<Env> {
     super(ctx, env);
     this.spotify = new Spotify(env, ctx.storage);
     this.google = new Google(env, ctx.storage);
+    this.canvas = new Canvas(ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
       const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog', 'jarvis', 'jarvis:state', 'jarvis:facts']);
       this.facts = (stored.get('jarvis:facts') as MemoryFact[]) || [];
@@ -217,7 +223,12 @@ export class Wall extends DurableObject<Env> {
       return json(await this.execute('editor', undefined, { type: 'jarvis.briefing' }));
     }
     if (path === '/api/integrations' && req.method === 'GET') {
-      return json({ spotify: await this.spotify.status(), google: await this.google.status(), weather: { provider: 'Open-Meteo', configured: true } });
+      return json({
+        spotify: await this.spotify.status(),
+        google: await this.google.status(),
+        canvas: await this.canvas.status(),
+        weather: { provider: 'Open-Meteo', configured: true },
+      });
     }
     if (path === '/api/google/connect' && req.method === 'POST') {
       if (!this.google.configured) return json({ ok: false, error: 'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to the server first.' }, 400);
@@ -228,12 +239,33 @@ export class Wall extends DurableObject<Env> {
         origin = new URL(returnTo).origin;
       } catch (e) {}
       if (!originOk(this.env, origin)) return json({ ok: false, error: 'Bad return address' }, 400);
-      return json({ ok: true, url: await this.google.authUrl(returnTo) });
+      return json({ ok: true, url: await this.google.authUrl(returnTo, { gmail: !!body.gmail }) });
     }
     if (path === '/api/google/disconnect' && req.method === 'POST') {
       await this.google.disconnect();
       this.nextGooglePoll = Infinity;
       this.setLive({ calendar: null, todos: null });
+      return json({ ok: true });
+    }
+    if (path === '/api/canvas/connect' && req.method === 'POST') {
+      const body: any = await req.json().catch(() => ({}));
+      const r = await this.canvas.connect(String(body.baseUrl || ''), String(body.token || ''));
+      if (r.ok) {
+        this.nextCanvasPoll = Date.now();
+        await this.pollCanvas();
+        await this.scheduleAlarm();
+      }
+      return json({ ok: r.ok, message: r.message, error: r.ok ? undefined : r.message, status: await this.canvas.status() }, r.ok ? 200 : 400);
+    }
+    if (path === '/api/canvas/disconnect' && req.method === 'POST') {
+      await this.canvas.disconnect();
+      this.nextCanvasPoll = Infinity;
+      this.setLive({ canvas: null });
+      return json({ ok: true });
+    }
+    if (path === '/api/canvas/refresh' && req.method === 'POST') {
+      await this.pollCanvas();
+      await this.scheduleAlarm();
       return json({ ok: true });
     }
     if (path === '/api/google/refresh' && req.method === 'POST') {
@@ -483,7 +515,7 @@ export class Wall extends DurableObject<Env> {
       if (r.facts !== this.facts) await this.saveFacts(r.facts);
       out = { result: { ok: r.ok, reply: r.reply } };
     } else if (cmd.type === 'jarvis.briefing') {
-      out = { result: { ok: true, reply: await composeBriefing(this.jarvis, this.env, this.live, now) } };
+      out = { result: { ok: true, reply: await composeBriefing(this.jarvis, this.env, this.live, now, await this.briefingExtras(now)) } };
       this.lastBriefingDate = localDate(now, this.jarvis.timeZone);
       this.briefingPendingUntil = 0;
       await this.saveJarvisState();
@@ -492,10 +524,17 @@ export class Wall extends DurableObject<Env> {
       out = { result: { ok: r.ok, reply: r.reply } };
       // Show what we already know changed; the next poll confirms it.
       if (r.patch && this.live.spotify) out.live = { ...this.live, spotify: { ...this.live.spotify, ...r.patch } };
-    } else if (cmd.type.indexOf('todo.') === 0 || cmd.type.indexOf('calendar.') === 0) {
-      const r = await this.google.control(cmd, this.live, now);
+    } else if (cmd.type.indexOf('canvas.') === 0) {
+      out = { result: await this.canvas.control(cmd, this.live.canvas, now, this.jarvis.timeZone) };
+    } else if (cmd.type.indexOf('todo.') === 0 || cmd.type.indexOf('calendar.') === 0 || cmd.type.indexOf('email.') === 0) {
+      const r = await this.google.control(cmd, this.live, now, { summarize: (instruction) => write(this.jarvis, this.env, instruction) });
       out = { result: { ok: r.ok, reply: r.reply } };
       if (r.todos) out.live = { ...this.live, todos: r.todos };
+      if (r.refreshCalendar) {
+        // Show the new (or removed) event on the wall right away.
+        this.lastCalendarPoll = 0;
+        this.nextGooglePoll = now + 1000;
+      }
       // Confirm against Google shortly (ids, ordering, edits made elsewhere).
       if (r.ok && cmd.type.indexOf('todo.') === 0 && cmd.type !== 'todo.list') this.nextGooglePoll = now + 1500;
     } else {
@@ -544,6 +583,37 @@ export class Wall extends DurableObject<Env> {
     else if (!reply) reply = results.map((x) => x.reply).join(' ') || 'Done.';
     const types = plan.commands.map((c) => c.type);
     return { result: { ok: !failed.length, reply, command: plan.commands[0] }, logType: types.length ? 'jarvis: ' + types.join(', ') : 'jarvis: answer' };
+  }
+
+  /** Extra briefing lines from Gmail (count only) and Canvas (what's due soon). */
+  private async briefingExtras(now: number): Promise<string[]> {
+    const out: string[] = [];
+    try {
+      if (await this.google.hasGmail()) {
+        const mail = await this.google.fetchEmail();
+        if (mail.unread) out.push(mail.unread + (mail.unread === 1 ? ' unread email' : ' unread emails') + ' in your primary inbox.');
+      }
+    } catch (e) {}
+    const c = this.live.canvas;
+    if (c && !c.error) {
+      const soon = c.items.filter((i) => !i.submitted && i.due && Date.parse(i.due) >= now && Date.parse(i.due) <= now + 36 * 3600 * 1000);
+      if (soon.length) out.push('Due on Canvas soon: ' + soon.slice(0, 3).map((i) => i.title + (i.course ? ' for ' + i.course.replace(/\s*[-–:].*$/, '') : '')).join(', ') + '.');
+      const missing = c.items.filter((i) => i.missing && !i.submitted);
+      if (missing.length) out.push(missing.length + ' missing on Canvas: ' + missing.slice(0, 2).map((i) => i.title).join(', ') + '.');
+    }
+    return out;
+  }
+
+  private async pollCanvas() {
+    const now = Date.now();
+    const state = await this.canvas.fetch(now);
+    if (state === null) {
+      this.nextCanvasPoll = Infinity;
+      if (this.live.canvas) this.setLive({ canvas: null });
+      return;
+    }
+    if (!sameExceptTime(this.live.canvas, state)) this.setLive({ canvas: state });
+    this.nextCanvasPoll = this.ctx.getWebSockets().length ? now + CANVAS_POLL_MS : Infinity;
   }
 
   private remember(user: string, reply: string, now: number) {
@@ -783,6 +853,9 @@ export class Wall extends DurableObject<Env> {
     if (await this.google.connected()) {
       if (this.nextGooglePoll > Date.now() + 1000) this.nextGooglePoll = Date.now() + 300;
     }
+    if (await this.canvas.connected()) {
+      if (this.nextCanvasPoll > Date.now() + CANVAS_POLL_MS) this.nextCanvasPoll = Date.now() + 500;
+    }
     await this.scheduleAlarm(); // also picks up a held briefing once a display connects
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -866,7 +939,7 @@ export class Wall extends DurableObject<Env> {
     if (this.dirty) next = this.lastPersist + PERSIST_INTERVAL_MS;
     const t = this.live.timer;
     if (t && t.status === 'running' && t.pomodoro) next = Math.min(next, t.endsAt);
-    next = Math.min(next, this.nextSpotifyPoll, this.nextGooglePoll, this.nextAnnouncementAt());
+    next = Math.min(next, this.nextSpotifyPoll, this.nextGooglePoll, this.nextCanvasPoll, this.nextAnnouncementAt());
     const current = await this.ctx.storage.getAlarm();
     if (next === Infinity) {
       if (current !== null) await this.ctx.storage.deleteAlarm();
@@ -908,6 +981,7 @@ export class Wall extends DurableObject<Env> {
     }
     if (Date.now() >= this.nextSpotifyPoll - 50) await this.pollSpotify();
     if (Date.now() >= this.nextGooglePoll - 50) await this.pollGoogle();
+    if (Date.now() >= this.nextCanvasPoll - 50) await this.pollCanvas();
     await this.checkAnnouncements(Date.now());
     await this.persist();
     await this.scheduleAlarm();

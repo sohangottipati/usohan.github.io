@@ -298,6 +298,51 @@ const RULES: Rule[] = [
     },
   },
   {
+    example: 'add dentist next tuesday at 3',
+    test: /^(add|put|schedule|create|book|set up)\b.*(\bcalendar\b|\b(at|from) \d|\bat noon\b)/,
+    build: (_t, original) => {
+      const DATE = String.raw`(today|tonight|tomorrow|(?:next\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)day|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}\/\d{1,2})`;
+      const TIME = String.raw`(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?|noon|midnight)`;
+      const re = new RegExp(
+        String.raw`^(?:add|put|schedule|create|book|set up)\s+(?:an?\s+|the\s+)?(?:event\s+|appointment\s+)?(.+?)\s+(?:on\s+|for\s+|this\s+)?` + DATE +
+          String.raw`(?:\s+(?:at|from)\s+` + TIME + String.raw`(?:\s*(?:to|until|till|-)\s*` + TIME + String.raw`)?)?(?:\s+(?:to|on|in)\s+(?:my\s+)?(?:[\w']+\s+)?calendar)?$`,
+        'i',
+      );
+      const src = stripLead(original);
+      const m = re.exec(src);
+      if (!m) return null;
+      const hasCalendar = /\bcalendar\b/i.test(src);
+      if (!m[3] && !hasCalendar) return null; // "add milk tomorrow" is a to-do, not an event
+      const payload: Record<string, unknown> = { title: m[1].trim(), date: m[2].toLowerCase().replace(/\s+/g, ' ') };
+      if (m[3]) payload.time = m[3].trim();
+      if (m[4]) payload.endTime = m[4].trim();
+      if (!m[3]) payload.allDay = true;
+      return { type: 'calendar.add', payload };
+    },
+  },
+  {
+    example: 'undo that',
+    // Could mean something else; with Jarvis on, the brain decides.
+    loose: () => true,
+    test: /^(undo( that)?|delete that( event)?|remove that( event)?|cancel that( event)?|take that off my calendar)$/,
+    build: () => ({ type: 'calendar.undo' }),
+  },
+  {
+    example: 'delete the dentist event',
+    test: /^(delete|remove|cancel) (the |my )?(.+?) (event|appointment)( from my calendar)?$/,
+    build: (_t, _o, m) => ({ type: 'calendar.undo', payload: { text: m[3].trim() } }),
+  },
+  {
+    example: 'check my email',
+    test: /\b(check|read|summari[sz]e) (my )?(e ?mails?|inbox|mail)\b|\bany (new |important )?e ?mails?\b|\bdo i have (any )?(new )?e ?mails?\b|\bwhat('s| is) in my (inbox|e ?mail)\b/,
+    build: () => ({ type: 'email.summary' }),
+  },
+  {
+    example: "what's due this week",
+    test: /\bwhat('s| is) due\b|\bwhat do i have due\b|\b(any|what) (homework|assignments)\b|\bwhat homework\b|\bdue (this|next) week\b|\bwhat('s| is) on canvas\b/,
+    build: (t) => ({ type: 'canvas.due', payload: { days: /next week/.test(t) ? 14 : /today|tonight/.test(t) ? 1 : /tomorrow/.test(t) ? 2 : 7 } }),
+  },
+  {
     example: "what's on my list",
     test: /\bwhat('s| is)? on (my|the) (to ?do |todo |to-do |task )?(list|tasks)\b|\bread (me )?my (to ?do |todo |to-do )?(list|tasks)\b|\bwhat do i (have|need) to do\b|^(my )?(to ?do|todo|to-do) list$/,
     build: () => ({ type: 'todo.list' }),

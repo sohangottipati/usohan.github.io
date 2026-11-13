@@ -58,5 +58,16 @@ export function buildContext(live: LiveState, project: Project, now: number, tz:
     const items = todos.items.slice(0, 12).map((i) => '- ' + i.title + (i.due ? (i.due < today ? ' (OVERDUE, was due ' + i.due + ')' : ' (due ' + (i.due === today ? 'today' : i.due) + ')') : ''));
     lines.push('To-dos (' + todos.items.length + ' open):' + (items.length ? '\n' + items.join('\n') : ' none'));
   }
+  const cv = live.canvas;
+  if (cv && !cv.error) {
+    const open = cv.items.filter((i) => !i.submitted && i.due && Date.parse(i.due) >= now - 86400000).slice(0, 8);
+    const missing = cv.items.filter((i) => i.missing && !i.submitted).slice(0, 4);
+    const fmt = (iso: string) => clockTime(Date.parse(iso), tz) + ' ' + (localDate(Date.parse(iso), tz) === localDate(now, tz) ? 'today' : localDate(Date.parse(iso), tz));
+    lines.push(
+      'Canvas (coursework):' +
+        (open.length ? '\n' + open.map((i) => '- ' + i.title + (i.course ? ' [' + i.course + ']' : '') + ' due ' + fmt(i.due!)).join('\n') : ' nothing due soon') +
+        (missing.length ? '\nMissing: ' + missing.map((i) => i.title).join(', ') : ''),
+    );
+  }
   return lines.join('\n');
 }

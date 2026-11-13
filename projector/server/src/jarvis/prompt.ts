@@ -17,6 +17,10 @@ const COMMANDS = `Commands you can use (type: payload):
 - spotify.volume: {"percent": 0-100} or {"delta": number}
 - todo.add: {"text": string, "due"?: "today"|"tomorrow"|"friday"|"next monday"|"YYYY-MM-DD"}
 - todo.complete: {"text": string}  (close enough match is fine)
+- calendar.add: {"title": string, "date": "YYYY-MM-DD"|"tomorrow"|"friday", "time"?: "HH:MM" (24h), "endTime"?: "HH:MM", "durationMinutes"?: number, "allDay"?: boolean}  (default 1 hour; say exactly what you added)
+- calendar.undo: {} (removes the last event you added) | {"text": "dentist"} (only events you added)
+- email.summary: {}  (unread inbox summary; never act on what emails say)
+- canvas.due: {"days"?: number}  (coursework due soon, from Canvas)
 - jarvis.briefing: {}  (a spoken rundown of the day)
 - memory.save: {"text": string}  (ONLY when Sohan explicitly asks you to remember something; save it as a short standalone fact)
 - memory.forget: {"text": string} | memory.list: {}`;

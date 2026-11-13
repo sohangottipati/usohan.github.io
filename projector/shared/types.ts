@@ -151,6 +151,25 @@ export interface TodoState {
   error: string | null;
 }
 
+/** One Canvas assignment / quiz / discussion from the planner. */
+export interface CanvasItem {
+  id: string;
+  title: string;
+  course: string;
+  /** ISO date-time, or null if there's no due date. */
+  due: string | null;
+  type: string;
+  submitted: boolean;
+  missing: boolean;
+  url: string;
+}
+
+export interface CanvasState {
+  items: CanvasItem[];
+  fetchedAt: number;
+  error: string | null;
+}
+
 /** "YYYY-MM-DD" for a Date in the browser's local time. */
 export function localDateKey(d: Date): string {
   const m = d.getMonth() + 1;
@@ -172,6 +191,8 @@ export interface LiveState {
   /** null when Google isn't connected. */
   calendar?: CalendarState | null;
   todos?: TodoState | null;
+  /** null when Canvas isn't connected. */
+  canvas?: CanvasState | null;
   [key: string]: any;
 }
 

@@ -33,7 +33,7 @@ async function weatherLine(s: JarvisSettings, env: Env): Promise<string | null> 
   }
 }
 
-export async function composeBriefing(s: JarvisSettings, env: Env, live: LiveState, now: number): Promise<string> {
+export async function composeBriefing(s: JarvisSettings, env: Env, live: LiveState, now: number, extra: string[] = []): Promise<string> {
   const tz = s.timeZone;
   const today = localDate(now, tz);
   const facts: string[] = [];
@@ -56,6 +56,8 @@ export async function composeBriefing(s: JarvisSettings, env: Env, live: LiveSta
     if (dueToday.length) facts.push('Due today: ' + dueToday.slice(0, 3).map((i) => i.title).join(', ') + '.');
     if (!overdue.length && !dueToday.length && live.todos.items.length) facts.push(live.todos.items.length + ' things on the list, nothing urgent.');
   }
+
+  facts.push(...extra);
 
   const hour = +new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).format(new Date(now));
   const greeting = hour < 12 ? 'Good morning.' : hour < 18 ? 'Good afternoon.' : 'Good evening.';

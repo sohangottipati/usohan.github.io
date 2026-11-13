@@ -28,11 +28,20 @@ export default function ProjectorPrivacyPage() {
       <h2 style={{ fontSize: 20, marginTop: 32 }}>What it accesses</h2>
       <ul>
         <li>
-          <b>Google Calendar (read-only):</b> event titles, times, locations and calendar colors for roughly yesterday through the next two days,
-          to show an agenda on the wall and answer &quot;what&apos;s next&quot;.
+          <b>Google Calendar:</b> event titles, times, locations and calendar colors for roughly yesterday through the next two days, to show an
+          agenda on the wall and answer &quot;what&apos;s next&quot;; and, when the owner asks, creating new events. The app only deletes events it
+          created itself and never edits or deletes the owner&apos;s other events.
         </li>
         <li>
           <b>Google Tasks:</b> the default task list, to show it on the wall, and to add or complete tasks when the owner asks by voice.
+        </li>
+        <li>
+          <b>Gmail (optional, read-only):</b> sender, subject and a short preview of recent unread emails, only when the owner asks for an inbox
+          summary (and an unread count in the morning briefing). Emails are never stored by the app.
+        </li>
+        <li>
+          <b>Canvas (optional, read-only):</b> assignment, quiz and discussion titles, courses, due dates and submission status, using a token
+          the owner created in Canvas.
         </li>
         <li>
           <b>Google account email:</b> only to show which account is connected.
@@ -52,10 +61,11 @@ export default function ProjectorPrivacyPage() {
         <li>Nothing is sold, used for advertising, or used to train AI models, and nothing is shared beyond the services named on this page.</li>
         <li>
           If the owner turns on the assistant (&quot;Jarvis&quot;), a spoken request is sent with a short snapshot (event titles and times,
-          open tasks, the song playing) to the AI provider the owner picked, Cloudflare Workers AI or Anthropic&apos;s API, only to work
-          out what to do. Neither provider trains models on this API traffic by default.
+          open tasks, upcoming coursework, the song playing) to the AI provider the owner picked, Cloudflare Workers AI or Anthropic&apos;s
+          API, only to work out what to do. When the owner asks for an inbox summary, the unread emails&apos; senders, subjects and previews
+          are sent to that provider to be summarized as text. Neither provider trains models on this API traffic by default.
         </li>
-        <li>Calendar data is never modified. Tasks are only created or completed when the owner asks.</li>
+        <li>Calendar events and tasks are only created, completed or removed when the owner asks.</li>
       </ul>
 
       <h2 style={{ fontSize: 20, marginTop: 32 }}>Removing access</h2>
