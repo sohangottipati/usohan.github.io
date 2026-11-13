@@ -18,7 +18,9 @@ import { validateProject } from '../../shared/validate';
 import { createSession, isEditor, randomToken, safeEqual, sessionCookie } from './auth';
 import { advanceTimer, runCommand } from './commands/handle';
 import { parseTextDetailed } from './commands/parseText';
-import { defaultJarvisSettings, sanitizeJarvisSettings, type JarvisSettings } from '../../shared/jarvis';
+import { defaultJarvisSettings, sanitizeJarvisSettings, type JarvisSettings, type MemoryFact } from '../../shared/jarvis';
+import { addFact, cleanFact, forgetFact, listFacts, totalChars } from './jarvis/memory';
+import { MAX_FACT_CHARS, MAX_MEMORY_CHARS } from '../../shared/jarvis';
 import { brainReady, think } from './jarvis/brain';
 import { composeBriefing } from './jarvis/briefing';
 import { buildContext } from './jarvis/context';
@@ -79,6 +81,8 @@ export class Wall extends DurableObject<Env> {
   private lastCalendarPoll = 0;
   private jarvis: JarvisSettings = defaultJarvisSettings();
   private memory: Exchange[] = [];
+  /** Long-term facts ("remember that…"). */
+  private facts: MemoryFact[] = [];
   private lastBrainError: string | null = null;
   private lastBrainMs = 0;
   private announcedTimerEnd = 0;
@@ -91,7 +95,8 @@ export class Wall extends DurableObject<Env> {
     this.spotify = new Spotify(env, ctx.storage);
     this.google = new Google(env, ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
-      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog', 'jarvis', 'jarvis:state']);
+      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog', 'jarvis', 'jarvis:state', 'jarvis:facts']);
+      this.facts = (stored.get('jarvis:facts') as MemoryFact[]) || [];
       this.jarvis = sanitizeJarvisSettings(stored.get('jarvis'));
       const js = (stored.get('jarvis:state') as any) || {};
       this.announcedTimerEnd = js.announcedTimerEnd || 0;
@@ -187,6 +192,26 @@ export class Wall extends DurableObject<Env> {
       const displays = this.ctx.getWebSockets('display').length;
       if (speech) this.broadcast({ t: 'speak', text, audio: speech.audio, mime: speech.mime });
       return json({ ok: !!speech, text, audio: speech ? speech.audio : null, mime: speech ? speech.mime : null, displays });
+    }
+    if (path === '/api/jarvis/memories' && req.method === 'POST') {
+      const body: any = await req.json().catch(() => ({}));
+      const out = addFact(this.facts, String(body.text || ''), Date.now(), randomToken(8));
+      if (out.facts !== this.facts) await this.saveFacts(out.facts);
+      return json({ ok: out.ok, reply: out.reply, facts: this.facts });
+    }
+    const memId = /^\/api\/jarvis\/memories\/([A-Za-z0-9_-]{4,40})$/.exec(path);
+    if (memId && req.method === 'PUT') {
+      const body: any = await req.json().catch(() => ({}));
+      const text = cleanFact(String(body.text || ''));
+      const others = this.facts.filter((f) => f.id !== memId[1]);
+      if (!text) return json({ ok: false, reply: 'A fact can’t be empty.', facts: this.facts }, 400);
+      if (totalChars(others) + text.length > MAX_MEMORY_CHARS) return json({ ok: false, reply: 'That would go over the memory limit.', facts: this.facts }, 400);
+      await this.saveFacts(this.facts.map((f) => (f.id === memId[1] ? { ...f, text: text.slice(0, MAX_FACT_CHARS) } : f)));
+      return json({ ok: true, facts: this.facts });
+    }
+    if (memId && req.method === 'DELETE') {
+      await this.saveFacts(this.facts.filter((f) => f.id !== memId[1]));
+      return json({ ok: true, facts: this.facts });
     }
     if (path === '/api/jarvis/briefing' && req.method === 'POST') {
       return json(await this.execute('editor', undefined, { type: 'jarvis.briefing' }));
@@ -439,7 +464,17 @@ export class Wall extends DurableObject<Env> {
   private async runOne(cmd: Command, now: number): Promise<CommandResult> {
     if (cmd.payload !== undefined && (typeof cmd.payload !== 'object' || cmd.payload === null)) cmd = { type: cmd.type };
     let out: { result: CommandResult; live?: LiveState; project?: Project };
-    if (cmd.type === 'jarvis.briefing') {
+    if (cmd.type === 'memory.save' || cmd.type === 'memory.forget' || cmd.type === 'memory.list') {
+      const p = cmd.payload || {};
+      const r =
+        cmd.type === 'memory.save'
+          ? addFact(this.facts, String(p.text || ''), now, randomToken(8))
+          : cmd.type === 'memory.forget'
+            ? forgetFact(this.facts, String(p.text || ''), typeof p.id === 'string' ? p.id : undefined)
+            : listFacts(this.facts, this.jarvis.aboutMe);
+      if (r.facts !== this.facts) await this.saveFacts(r.facts);
+      out = { result: { ok: r.ok, reply: r.reply } };
+    } else if (cmd.type === 'jarvis.briefing') {
       out = { result: { ok: true, reply: await composeBriefing(this.jarvis, this.env, this.live, now) } };
       this.lastBriefingDate = localDate(now, this.jarvis.timeZone);
       this.briefingPendingUntil = 0;
@@ -483,7 +518,7 @@ export class Wall extends DurableObject<Env> {
   private async askJarvis(input: string, now: number, fallback: Command | null): Promise<{ result: CommandResult; logType: string | null }> {
     const memory = this.memory.filter((m) => now - m.at < this.jarvis.memoryMinutes * 60000);
     const context = buildContext(this.live, this.project, now, this.jarvis.timeZone);
-    const r = await think(this.jarvis, this.env, input, context, memory);
+    const r = await think(this.jarvis, this.env, input, context, memory, this.facts);
     this.lastBrainMs = r.ms;
     if ('error' in r) {
       this.lastBrainError = r.error;
@@ -507,9 +542,16 @@ export class Wall extends DurableObject<Env> {
     this.memory = [...this.memory.filter((m) => now - m.at < this.jarvis.memoryMinutes * 60000), { at: now, user, reply }].slice(-MEMORY_SIZE);
   }
 
+  private async saveFacts(facts: MemoryFact[]) {
+    this.facts = facts;
+    await this.ctx.storage.put('jarvis:facts', facts);
+    // Editors with the Jarvis panel open refresh their list from the status endpoint.
+  }
+
   private jarvisStatus() {
     return {
       settings: this.jarvis,
+      facts: this.facts,
       status: {
         ready: brainReady(this.jarvis, this.env),
         workersAI: !!(this.env.AI || this.env.AI_MOCK_URL),

@@ -3,7 +3,7 @@
 // a plan or an error string.
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { JarvisSettings } from '../../../shared/jarvis';
+import type { JarvisSettings, MemoryFact } from '../../../shared/jarvis';
 import type { Env } from '../env';
 import { aiAvailable, aiRun } from './ai';
 import { parsePlan, type Plan } from './plan';
@@ -18,11 +18,11 @@ export function brainReady(s: JarvisSettings, env: Env): string | null {
   return null;
 }
 
-export async function think(s: JarvisSettings, env: Env, request: string, context: string, memory: Exchange[]): Promise<ThinkResult> {
+export async function think(s: JarvisSettings, env: Env, request: string, context: string, memory: Exchange[], facts: MemoryFact[] = []): Promise<ThinkResult> {
   const started = Date.now();
   const notReady = brainReady(s, env);
   if (notReady) return { error: notReady, ms: 0 };
-  const system = systemPrompt(s);
+  const system = systemPrompt(s, facts);
   const user = userMessage(request, context, memory);
   try {
     const raw = s.provider === 'claude' ? await askClaude(s, env, system, user) : await askWorkersAI(s, env, system, user);

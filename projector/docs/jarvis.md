@@ -70,6 +70,22 @@ A room mic, or any script, can ask for a spoken reply by adding `"voice": "wall"
 
 With a brain on, the briefing is phrased naturally; without one, it's a plain summary. All announcements show up in **Commands → Recent commands** with the source *jarvis*.
 
+## Memory
+
+Jarvis has three kinds of memory:
+
+| | What it is | How long |
+|---|---|---|
+| **Conversation** | The last few exchanges, so "make that 30" works | Minutes (set in the panel; default 5) |
+| **About me** | A box in the panel for standing facts: school, routines, preferences | Until you change it (up to 1,000 characters) |
+| **Memories** | Facts you ask it to keep: "remember that Mom's birthday is March 3" | Until you delete them (up to 50 facts / 3,000 characters) |
+
+- **"Remember that …"** saves a fact. **"Forget …"** removes the closest match ("forget the pizza thing"). **"What do you know about me?"** reads them back. These work even with the brain off.
+- Jarvis **only saves what you ask it to**. It never quietly collects things from conversation.
+- The **Memories** list in the panel shows everything saved; click a fact to edit it, or ✕ to delete it.
+- About me and every saved fact go to the model with every request. That's what makes answers personal, and it's why there's a cap: a maxed-out memory still leaves room for roughly 100+ requests a day on the free default model.
+- The model doesn't learn or change; the memory is just text it's shown each time, so you can always see exactly what it knows.
+
 ## Personality
 
 Name and **house rules** are in the panel, e.g. *"Call me boss. Keep replies under 10 words."* **Memory** sets how long it remembers the conversation for follow-ups (default 5 minutes; 0 turns it off).

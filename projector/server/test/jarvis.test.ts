@@ -5,6 +5,9 @@ import { parseTextDetailed } from '../src/commands/parseText';
 import { buildContext } from '../src/jarvis/context';
 import { extractJson, parsePlan } from '../src/jarvis/plan';
 import { localDate, nextDailyTime } from '../src/jarvis/time';
+import { addFact, cleanFact, forgetFact, listFacts } from '../src/jarvis/memory';
+import { systemPrompt } from '../src/jarvis/prompt';
+import { defaultJarvisSettings } from '../../shared/jarvis';
 
 let failed = 0;
 function eq(name: string, got: any, want: any) {
@@ -58,6 +61,31 @@ eq('briefing phrase', parseTextDetailed('good morning').command, { type: 'jarvis
 eq('several requests go to the brain', parseTextDetailed('focus mode, 25 minute timer and pause the music').loose, true);
 eq('and a half is still one request', parseTextDetailed('timer for an hour and a half').loose, false);
 eq('unknown', parseTextDetailed("my pizza's done in like 12 minutes").command, null);
+
+// ----- long-term memory -----
+eq('clean', cleanFact('that my mom’s birthday is March 3.'), 'My mom’s birthday is March 3');
+let facts: any[] = [];
+let o = addFact(facts, "that my mom's birthday is March 3", 1, 'a');
+eq('add', [o.ok, o.facts.length, o.facts[0].text], [true, 1, "My mom's birthday is March 3"]);
+facts = o.facts;
+eq('duplicate', addFact(facts, "My mom's birthday is March 3!", 2, 'b').reply, 'I already know that.');
+facts = addFact(facts, 'pizza means a 12 minute oven timer', 3, 'c').facts;
+eq('forget fuzzy', forgetFact(facts, 'the pizza thing').facts.map((f) => f.id), ['a']);
+eq('forget missing', forgetFact(facts, 'my car').ok, false);
+eq('forget by words', forgetFact(facts, "mom's birthday").facts.map((f) => f.id), ['c']);
+eq('forget needs real overlap', forgetFact(facts, 'the oven in my apartment kitchen').ok, false);
+let full: any[] = [];
+for (let i = 0; i < 50; i++) full = addFact(full, 'Fact number ' + i, i, 'f' + i).facts;
+eq('cap by count', addFact(full, 'one more', 99, 'x').ok, false);
+eq('cap by size', addFact([{ id: 'big', text: 'x'.repeat(2990), at: 0 }], 'a long-ish fact here', 1, 'y').ok, false);
+eq('list', /2 facts/.test(listFacts(facts, '').reply), true);
+eq('list empty', /Nothing yet/.test(listFacts([], '').reply), true);
+const sp = systemPrompt({ ...defaultJarvisSettings(), aboutMe: 'UCR student' }, facts);
+eq('prompt includes facts', sp.indexOf("- My mom's birthday is March 3") > 0 && sp.indexOf('About Sohan (from him):\nUCR student') > 0, true);
+eq('remember phrase', parseTextDetailed("Remember that my mom's birthday is March 3").command, { type: 'memory.save', payload: { text: "my mom's birthday is March 3" } });
+eq('remember to → not memory', parseTextDetailed('remember to buy milk').command === null || parseTextDetailed('remember to buy milk').command!.type !== 'memory.save', true);
+eq('forget phrase', parseTextDetailed('forget the thing about pizza').command, { type: 'memory.forget', payload: { text: 'pizza' } });
+eq('list phrase', parseTextDetailed('what do you know about me').command, { type: 'memory.list' });
 
 if (failed) {
   console.log(failed + ' failed');
