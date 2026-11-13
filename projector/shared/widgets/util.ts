@@ -60,3 +60,62 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, style?: string
   if (parent) parent.appendChild(e);
   return e;
 }
+
+// ---------- sound ----------
+// Browsers only allow audio after a user gesture. On the projector that's the
+// first remote button press (which also triggers fullscreen).
+
+let audio: AudioContext | null = null;
+
+function unlockAudio() {
+  const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext;
+  if (!Ctor) return;
+  try {
+    if (!audio) audio = new Ctor();
+    if (audio!.state === 'suspended') audio!.resume();
+  } catch (e) {}
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', unlockAudio);
+  document.addEventListener('click', unlockAudio);
+  document.addEventListener('touchstart', unlockAudio);
+}
+
+/** Three soft beeps. Silently does nothing if audio isn't allowed yet. */
+export function playChime() {
+  unlockAudio();
+  if (!audio || audio.state !== 'running') return;
+  const t0 = audio.currentTime + 0.02;
+  for (let i = 0; i < 3; i++) {
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = i === 2 ? 1320 : 880;
+    const t = t0 + i * 0.35;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    osc.connect(gain);
+    gain.connect(audio.destination);
+    osc.start(t);
+    osc.stop(t + 0.32);
+  }
+}
+
+/** Shrinks an element's font size until its content fits its box. */
+export function fitText(node: HTMLElement, maxPx: number, minPx = 12) {
+  let fs = maxPx;
+  node.style.fontSize = fs + 'px';
+  for (let i = 0; i < 30 && fs > minPx && (node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1); i++) {
+    fs = Math.max(minPx, fs * 0.9);
+    node.style.fontSize = fs + 'px';
+  }
+}
+
+export function formatClock(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h ? h + ':' + pad2(m) + ':' + pad2(s) : m + ':' + pad2(s);
+}

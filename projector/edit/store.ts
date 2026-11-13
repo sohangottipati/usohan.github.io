@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { defaultLiveState, activeScene, type CalibrationState, type Layer, type LiveState, type Project } from '../shared/types';
+import { defaultLiveState, activeScene, type CalibrationState, type Command, type CommandLogEntry, type CommandResult, type Layer, type LiveState, type Project } from '../shared/types';
 import type { SocketStatus } from '../shared/client';
 import type { Guide } from './geometry';
 
@@ -12,9 +12,19 @@ type Sender = (p: Project) => void;
 let projectSender: Sender | null = null;
 let calibrationSender: ((c: CalibrationState) => void) | null = null;
 
-export function setSenders(p: Sender | null, c: ((c: CalibrationState) => void) | null) {
+type CommandSender = (input: { text?: string; command?: Command }) => Promise<CommandResult>;
+let commandSender: CommandSender | null = null;
+
+export function setSenders(p: Sender | null, c: ((c: CalibrationState) => void) | null, cmd: CommandSender | null = null) {
   projectSender = p;
   calibrationSender = c;
+  commandSender = cmd;
+}
+
+/** Run a command (text or structured) through the server, as the editor. */
+export function sendCommand(input: { text?: string; command?: Command }): Promise<CommandResult> {
+  if (!commandSender) return Promise.resolve({ ok: false, reply: 'Not connected' });
+  return commandSender(input);
 }
 
 export interface CommitOptions {
@@ -32,6 +42,9 @@ interface EditorState {
   selectedId: string | null;
   selectedCorner: number | null;
   mode: 'layers' | 'keystone';
+  /** Right-hand panel: layer/canvas properties, or the command tools. */
+  panel: 'props' | 'commands';
+  commandLog: CommandLogEntry[];
   guides: Guide[];
   past: Project[];
   future: Project[];
@@ -62,6 +75,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   selectedId: null,
   selectedCorner: null,
   mode: 'layers',
+  panel: 'props',
+  commandLog: [],
   guides: [],
   past: [],
   future: [],

@@ -4,10 +4,12 @@
 import type { WidgetDefinition } from './types';
 import { clockWidget } from './clock';
 import { mediaWidget } from './media';
+import { messageWidget } from './message';
 import { particlesWidget } from './particles';
 import { shapeWidget } from './shape';
 import { sunArcWidget } from './sunArc';
 import { textWidget } from './text';
+import { timerWidget } from './timer';
 import { weatherWidget } from './weather';
 
 const ALL: WidgetDefinition<any>[] = [
@@ -15,6 +17,8 @@ const ALL: WidgetDefinition<any>[] = [
   mediaWidget,
   textWidget,
   clockWidget,
+  timerWidget,
+  messageWidget,
   particlesWidget,
   sunArcWidget,
   weatherWidget,

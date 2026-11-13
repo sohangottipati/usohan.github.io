@@ -3,9 +3,21 @@
 // WebSocket Hibernation API so idle displays cost nothing.
 
 import { DurableObject } from 'cloudflare:workers';
-import { defaultLiveState, defaultProject, type ClientMessage, type LiveState, type Project, type ServerMessage } from '../../shared/types';
+import {
+  defaultLiveState,
+  defaultProject,
+  type ClientMessage,
+  type Command,
+  type CommandLogEntry,
+  type CommandResult,
+  type LiveState,
+  type Project,
+  type ServerMessage,
+} from '../../shared/types';
 import { validateProject } from '../../shared/validate';
 import { createSession, isEditor, randomToken, safeEqual, sessionCookie } from './auth';
+import { advanceTimer, runCommand } from './commands/handle';
+import { parseText } from './commands/parseText';
 import { isLocalDev, isOriginAllowed, type Env } from './env';
 
 type Role = 'editor' | 'display';
@@ -17,6 +29,10 @@ const MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 // SQLite-backed Durable Object values are capped at 2 MB.
 const MAX_MEDIA_BYTES = 1.9 * 1024 * 1024;
 const LOGIN_LOCK_MS = 5 * 60 * 1000;
+const COMMAND_LOG_SIZE = 50;
+const COMMAND_RATE = 30; // per minute, per wall
+const TOKEN_FAILURE_LIMIT = 10; // wrong tokens per minute before refusing everything for a minute
+const MAX_COMMAND_TEXT = 500;
 
 function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -31,11 +47,15 @@ export class Wall extends DurableObject<Env> {
   private dirty = false;
   private loginFailures = 0;
   private loginLockedUntil = 0;
+  private commandToken = '';
+  private commandLog: CommandLogEntry[] = [];
+  private commandTimes: number[] = [];
+  private tokenFailures: number[] = [];
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey']);
+      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog']);
       const p = stored.get('project');
       if (p && validateProject(p) === null) this.project = p as Project;
       const l = stored.get('live') as LiveState | undefined;
@@ -46,6 +66,12 @@ export class Wall extends DurableObject<Env> {
         this.displayKey = randomToken(18);
         await ctx.storage.put('displayKey', this.displayKey);
       }
+      this.commandToken = (stored.get('commandToken') as string) || env.COMMAND_TOKEN || '';
+      if (!this.commandToken) {
+        this.commandToken = randomToken(24);
+        await ctx.storage.put('commandToken', this.commandToken);
+      }
+      this.commandLog = (stored.get('commandLog') as CommandLogEntry[]) || [];
     });
   }
 
@@ -60,6 +86,9 @@ export class Wall extends DurableObject<Env> {
     // Uploaded images are public (unguessable ids) so the projector can load them in <img>.
     const media = /^\/api\/media\/([A-Za-z0-9_-]{8,40})$/.exec(path);
     if (media && req.method === 'GET') return this.getMedia(media[1]);
+
+    // Voice assistants and scripts: bearer token, no cookie, no CORS.
+    if (path === '/api/command' && req.method === 'POST') return this.commandApi(req);
 
     if (path === '/api/login' && req.method === 'POST') return this.login(req);
     if (path === '/api/logout' && req.method === 'POST') {
@@ -83,9 +112,93 @@ export class Wall extends DurableObject<Env> {
       return json({ key: this.displayKey });
     }
     if (path === '/api/project' && req.method === 'GET') return json(this.project);
+    if (path === '/api/command-token' && req.method === 'GET') return json({ token: this.commandToken });
+    if (path === '/api/command-token/rotate' && req.method === 'POST') {
+      this.commandToken = randomToken(24);
+      await this.ctx.storage.put('commandToken', this.commandToken);
+      return json({ token: this.commandToken });
+    }
+    if (path === '/api/commands' && req.method === 'GET') return json({ entries: this.commandLog });
     if (path === '/api/media' && req.method === 'POST') return this.putMedia(req);
 
     return json({ ok: false, error: 'Not found' }, 404);
+  }
+
+  // ---------- commands ----------
+
+  private async commandApi(req: Request): Promise<Response> {
+    // Read the body before any early reply: answering mid-upload breaks keep-alive connections.
+    const raw = (await req.text()).slice(0, 10000);
+    const now = Date.now();
+    this.tokenFailures = this.tokenFailures.filter((t) => now - t < 60000);
+    if (this.tokenFailures.length >= TOKEN_FAILURE_LIMIT) {
+      return json({ ok: false, reply: 'Too many bad tokens. Try again in a minute.' }, 429);
+    }
+    const auth = req.headers.get('Authorization') || '';
+    const token = /^Bearer\s+(.+)$/i.exec(auth);
+    if (!token || !safeEqual(token[1].trim(), this.commandToken)) {
+      this.tokenFailures.push(now);
+      return json({ ok: false, reply: 'Wrong or missing command token.' }, 401);
+    }
+    this.commandTimes = this.commandTimes.filter((t) => now - t < 60000);
+    if (this.commandTimes.length >= COMMAND_RATE) {
+      return json({ ok: false, reply: 'Slow down: too many commands this minute.' }, 429);
+    }
+    this.commandTimes.push(now);
+
+    // JSON {type, payload} or {text}, or a plain-text body (handy from Shortcuts and curl).
+    let body: any = null;
+    try {
+      body = JSON.parse(raw);
+    } catch (e) {
+      body = { text: raw };
+    }
+    if (typeof body === 'string') body = { text: body };
+    if (!body || typeof body !== 'object') return json({ ok: false, reply: 'Send {"text": "..."} or {"type": "...", "payload": {...}}.' }, 400);
+    const result = await this.execute('api', body.text, body.type ? { type: String(body.type), payload: body.payload } : undefined);
+    return json(result);
+  }
+
+  /** Parses (if needed), runs, logs and broadcasts a command. */
+  private async execute(source: string, text?: string, command?: Command): Promise<CommandResult> {
+    const now = Date.now();
+    let cmd: Command | null = command && command.type ? command : null;
+    const input = typeof text === 'string' ? text.trim().slice(0, MAX_COMMAND_TEXT) : '';
+    if (!cmd && input) cmd = parseText(input);
+
+    let result: CommandResult;
+    if (!cmd) {
+      result = input ? { ok: false, reply: `Sorry, I didn't understand "${input}".` } : { ok: false, reply: 'Empty command.' };
+    } else {
+      if (cmd.payload !== undefined && (typeof cmd.payload !== 'object' || cmd.payload === null)) cmd = { type: cmd.type };
+      const out = runCommand(cmd, { live: this.live, project: this.project, now });
+      result = { ...out.result, command: cmd };
+      if (out.live) {
+        this.live = out.live;
+        this.broadcast({ t: 'live', live: this.live, serverTime: now });
+      }
+      if (out.project) {
+        this.project = out.project;
+        this.rev++;
+        this.broadcast({ t: 'project', project: this.project, rev: this.rev, serverTime: now });
+      }
+      if (result.ok) this.broadcast({ t: 'command', command: cmd });
+      if (out.live || out.project) this.dirty = true;
+    }
+
+    this.commandLog = [
+      { at: now, source, input: input || (cmd ? cmd.type : ''), type: cmd ? cmd.type : null, ok: result.ok, reply: result.reply },
+      ...this.commandLog,
+    ].slice(0, COMMAND_LOG_SIZE);
+    const logMsg = JSON.stringify({ t: 'commandLog', entries: this.commandLog } satisfies ServerMessage);
+    for (const ws of this.ctx.getWebSockets('editor')) {
+      try {
+        ws.send(logMsg);
+      } catch (e) {}
+    }
+    await this.ctx.storage.put('commandLog', this.commandLog);
+    await this.markDirty();
+    return result;
   }
 
   // ---------- media ----------
@@ -185,6 +298,7 @@ export class Wall extends DurableObject<Env> {
       serverTime: Date.now(),
       role,
     });
+    if (role === 'editor') this.sendTo(server, { t: 'commandLog', entries: this.commandLog });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -203,7 +317,10 @@ export class Wall extends DurableObject<Env> {
     const role = this.ctx.getTags(ws)[0] as Role;
     if (role !== 'editor') return; // displays are read-only
 
-    if (msg.t === 'setProject') {
+    if (msg.t === 'command') {
+      const result = await this.execute('editor', msg.text, msg.command);
+      this.sendTo(ws, { t: 'commandResult', id: String(msg.id || ''), result });
+    } else if (msg.t === 'setProject') {
       const err = validateProject(msg.project);
       if (err) {
         this.sendTo(ws, { t: 'error', message: err });
@@ -249,16 +366,27 @@ export class Wall extends DurableObject<Env> {
     }
   }
 
-  // ---------- persistence ----------
+  // ---------- persistence + alarms ----------
   // Drags stream ~25 updates/s; write at most once a second, with an alarm for the tail.
+  // The one alarm also wakes the object when a Pomodoro phase ends.
 
   private async markDirty() {
     this.dirty = true;
-    const now = Date.now();
-    if (now - this.lastPersist >= PERSIST_INTERVAL_MS) {
-      await this.persist();
-    } else if ((await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(this.lastPersist + PERSIST_INTERVAL_MS);
+    if (Date.now() - this.lastPersist >= PERSIST_INTERVAL_MS) await this.persist();
+    await this.scheduleAlarm();
+  }
+
+  private async scheduleAlarm() {
+    let next = Infinity;
+    if (this.dirty) next = this.lastPersist + PERSIST_INTERVAL_MS;
+    const t = this.live.timer;
+    if (t && t.status === 'running' && t.pomodoro) next = Math.min(next, t.endsAt);
+    const current = await this.ctx.storage.getAlarm();
+    if (next === Infinity) {
+      if (current !== null) await this.ctx.storage.deleteAlarm();
+    } else if (current !== next) {
+      // Also covers the alarm that is firing right now, which may still be reported here.
+      await this.ctx.storage.setAlarm(next);
     }
   }
 
@@ -270,6 +398,19 @@ export class Wall extends DurableObject<Env> {
   }
 
   async alarm() {
+    // Roll Pomodoro phases forward (several, if the object slept through them).
+    let changed = false;
+    for (let i = 0; i < 20; i++) {
+      const next = advanceTimer(this.live, Date.now());
+      if (!next) break;
+      this.live = next;
+      changed = true;
+    }
+    if (changed) {
+      this.broadcast({ t: 'live', live: this.live, serverTime: Date.now() });
+      this.dirty = true;
+    }
     await this.persist();
+    await this.scheduleAlarm();
   }
 }

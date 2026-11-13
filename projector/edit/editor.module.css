@@ -434,3 +434,65 @@
 .row .input {
   flex: 1;
 }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.chips button {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+.replyOk,
+.replyBad {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+.replyOk {
+  color: #4ee08f;
+}
+.replyBad {
+  color: #ffb36b;
+}
+.statusGrid {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+.code {
+  margin: 8px 0 0;
+  padding: 8px;
+  background: var(--e-bg);
+  border: 1px solid var(--e-border);
+  border-radius: 6px;
+  font: 11px/1.5 ui-monospace, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--e-sub);
+}
+.link {
+  color: var(--e-accent);
+}
+.logList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.logItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--e-border);
+}
+.logItem .replyOk,
+.logItem .replyBad {
+  margin: 0;
+}
+.logMeta {
+  color: var(--e-sub);
+  font-size: 11px;
+}

@@ -90,6 +90,8 @@ if (!key) {
       } else if (msg.t === 'live') {
         setServerTime(msg.serverTime);
         live.set(msg.live);
+      } else if (msg.t === 'command') {
+        renderer.dispatchCommand(msg.command);
       } else if (msg.t === 'pong') {
         setServerTime(msg.serverTime);
       } else if (msg.t === 'error') {
