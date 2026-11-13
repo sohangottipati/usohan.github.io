@@ -66,7 +66,15 @@ export class Canvas {
 
   private async get(path: string, conn = this.conn): Promise<Response> {
     if (!conn) throw new Error('Canvas is not connected.');
-    return fetch(conn.baseUrl + path, { headers: { Authorization: 'Bearer ' + conn.token, Accept: 'application/json' } });
+    return fetch(conn.baseUrl + path, {
+      headers: {
+        Authorization: 'Bearer ' + conn.token,
+        Accept: 'application/json+canvas-string-ids, application/json',
+        // Some school firewalls refuse requests that don't say what they are.
+        'User-Agent': 'ProjectorWall/1.0 (+https://sohan.website/projector/privacy)',
+      },
+      redirect: 'manual',
+    });
   }
 
   /** Checks the URL and token against Canvas, then saves them. */
@@ -82,8 +90,16 @@ export class Canvas {
     } catch (e) {
       return { ok: false, message: 'Couldn’t reach ' + baseUrl + '.' };
     }
+    if (r.status >= 300 && r.status < 400) {
+      const to = r.headers.get('Location') || '';
+      let host = '';
+      try {
+        host = new URL(to, baseUrl).host;
+      } catch (e) {}
+      return { ok: false, message: 'That address redirects' + (host ? ' to ' + host : '') + '. Use the address your browser shows when you’re in Canvas' + (host ? ' (try ' + host + ')' : '') + '.' };
+    }
     if (r.status === 401) return { ok: false, message: 'Canvas rejected that token. Make a new one and paste it again.' };
-    if (!r.ok) return { ok: false, message: 'Canvas answered ' + r.status + '. Check the address.' };
+    if (!r.ok) return { ok: false, message: 'Canvas answered ' + r.status + ': ' + (await canvasReason(r)) };
     const me: any = await r.json().catch(() => ({}));
     trial.user = me.short_name || me.name || '';
     this.conn = trial;
@@ -110,7 +126,7 @@ export class Canvas {
         this.lastError = 'Canvas token expired or was revoked. Connect Canvas again.';
         return { items: [], fetchedAt: now, error: this.lastError };
       }
-      if (!r.ok) throw new Error('Canvas planner failed (' + r.status + ').');
+      if (!r.ok) throw new Error('Canvas planner failed (' + r.status + '): ' + (await canvasReason(r)));
       const list: any[] = await r.json();
       const items: CanvasItem[] = [];
       for (const it of list) {
@@ -146,6 +162,25 @@ export class Canvas {
     const days = cmd.payload && typeof cmd.payload.days === 'number' ? Math.max(1, Math.min(21, cmd.payload.days)) : 7;
     return { ok: true, reply: dueSummary(s.items, now, tz, days) };
   }
+}
+
+/** Why Canvas said no, in words: its own JSON error, or a hint about firewalls / API restrictions. */
+async function canvasReason(r: Response): Promise<string> {
+  const type = r.headers.get('Content-Type') || '';
+  const text = await r.text().catch(() => '');
+  if (type.indexOf('json') >= 0) {
+    try {
+      const j = JSON.parse(text);
+      const msg = (j.errors && j.errors[0] && j.errors[0].message) || j.message || j.error;
+      if (msg) return String(msg).slice(0, 160) + (r.status === 403 ? ' (your school may not allow personal API tokens).' : '');
+    } catch (e) {}
+  }
+  if (r.status === 403) {
+    return /<html/i.test(text)
+      ? 'a firewall in front of Canvas blocked the request. Tell Claude: "Canvas firewall 403".'
+      : 'Canvas refused the request. Your school may not allow personal API tokens.';
+  }
+  return 'check the address.';
 }
 
 function dayName(iso: string, now: number, tz: string): string {
