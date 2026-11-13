@@ -22,14 +22,21 @@ export default function IntegrationsPanel() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const refresh = useCallback(() => {
+    setChecking(true);
     api('/api/integrations')
       .then((d) => {
         setSpotify(d.spotify);
         setLoadError(null);
       })
-      .catch((e) => setLoadError(e.message));
+      .catch((e) => setLoadError(e.message))
+      .finally(() => {
+        setChecking(false);
+        setCheckedAt(new Date());
+      });
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -108,10 +115,16 @@ export default function IntegrationsPanel() {
                 Full steps
               </a>{' '}
               · then{' '}
-              <button className={css.inlineBtn} onClick={refresh}>
-                check again
+              <button className={css.inlineBtn} onClick={refresh} disabled={checking}>
+                {checking ? 'checking…' : 'check again'}
               </button>
             </p>
+            {checkedAt && !checking && (
+              <p className={css.help}>
+                Still not set up · checked {checkedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}. The server
+                doesn&apos;t see SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET yet.
+              </p>
+            )}
           </>
         )}
 
