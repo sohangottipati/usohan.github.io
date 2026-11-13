@@ -3,6 +3,7 @@
 
 import type { WidgetDefinition } from './types';
 import { calendarWidget } from './calendar';
+import { canvasDueWidget } from './canvasDue';
 import { clockWidget } from './clock';
 import { mediaWidget } from './media';
 import { messageWidget } from './message';
@@ -28,6 +29,7 @@ const ALL: WidgetDefinition<any>[] = [
   spotifyNowPlayingWidget,
   calendarWidget,
   todoWidget,
+  canvasDueWidget,
 ];
 
 const byType: { [type: string]: WidgetDefinition<any> } = {};

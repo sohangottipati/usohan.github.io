@@ -73,6 +73,19 @@ check('complete buy milk', { type: 'todo.complete', payload: { text: 'buy milk' 
 check('mark the essay as done', { type: 'todo.complete', payload: { text: 'essay' } });
 check('check off laundry', { type: 'todo.complete', payload: { text: 'laundry' } });
 
+// calendar, email, canvas
+check('add dentist next tuesday at 3', { type: 'calendar.add', payload: { title: 'dentist', date: 'next tuesday', time: '3' } });
+check('Wall schedule Study Group on Friday from 6 to 8pm', { type: 'calendar.add', payload: { title: 'Study Group', date: 'friday', time: '6', endTime: '8pm' } });
+check("add Mom's birthday on March 3rd to my calendar", { type: 'calendar.add', payload: { title: "Mom's birthday", date: 'march 3rd', allDay: true } });
+check('put lunch with Alex tomorrow at 12:30 on my calendar', { type: 'calendar.add', payload: { title: 'lunch with Alex', date: 'tomorrow', time: '12:30' } });
+check('add milk to my list tomorrow', { type: 'todo.add', payload: { text: 'milk', due: 'tomorrow' } });
+check('undo that', { type: 'calendar.undo' });
+check('delete the dentist event', { type: 'calendar.undo', payload: { text: 'dentist' } });
+check('check my email', { type: 'email.summary' });
+check('do I have any new emails', { type: 'email.summary' });
+check("what's due this week", { type: 'canvas.due', payload: { days: 7 } });
+check('any homework due tomorrow', { type: 'canvas.due', payload: { days: 2 } });
+
 // spotify
 check('skip the song', { type: 'spotify.next' });
 check('skip', { type: 'spotify.next' });

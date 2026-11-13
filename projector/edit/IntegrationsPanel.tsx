@@ -19,10 +19,19 @@ interface GoogleStatus {
   connected: boolean;
   email: string;
   calendar: boolean;
+  calendarWrite?: boolean;
+  gmail?: boolean;
   tasks: boolean;
   timeZone: string;
   error: string | null;
   redirectUri: string;
+}
+
+interface CanvasStatus {
+  connected: boolean;
+  baseUrl: string;
+  user: string;
+  error: string | null;
 }
 
 const DOCS = 'https://github.com/sohangottipati/usohan.github.io/blob/main/projector/docs/spotify.md';
@@ -38,6 +47,8 @@ export default function IntegrationsPanel() {
   const live = useEditor((s) => s.live);
   const [spotify, setSpotify] = useState<SpotifyStatus | null>(null);
   const [google, setGoogle] = useState<GoogleStatus | null>(null);
+  const [canvas, setCanvas] = useState<CanvasStatus | null>(null);
+  const [wantGmail, setWantGmail] = useState(false);
   const [copiedGoogle, setCopiedGoogle] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,6 +64,7 @@ export default function IntegrationsPanel() {
       .then((d) => {
         setSpotify(d.spotify);
         setGoogle(d.google || null);
+        setCanvas(d.canvas || null);
         setLoadError(null);
       })
       .catch((e) => setLoadError(e.message))
@@ -75,7 +87,7 @@ export default function IntegrationsPanel() {
   async function connect(service: 'spotify' | 'google' = 'spotify') {
     setBusy(true);
     try {
-      const d = await api('/api/' + service + '/connect', { method: 'POST', body: JSON.stringify({ returnTo: returnAddress() }) });
+      const d = await api('/api/' + service + '/connect', { method: 'POST', body: JSON.stringify({ returnTo: returnAddress(), gmail: service === 'google' && wantGmail }) });
       location.href = d.url;
     } catch (e: any) {
       useEditor.getState().set({ error: e.message });
@@ -220,6 +232,8 @@ export default function IntegrationsPanel() {
         )}
       </section>
 
+      <CanvasCard status={canvas} onChange={refresh} />
+
       <section className={css.section}>
         <h3 className={css.h3}>Weather &amp; sun</h3>
         <p className={css.replyOk}>Ready</p>
@@ -285,11 +299,15 @@ export default function IntegrationsPanel() {
           <>
             <p className={css.muted}>Not connected.</p>
             {google.error && <p className={css.replyBad}>{google.error}</p>}
-            <button className={css.primary} style={{ marginTop: 8 }} disabled={busy} onClick={() => connect('google')}>
+            <label className={css.checkRow} style={{ marginTop: 8 }}>
+              <input type="checkbox" checked={wantGmail} onChange={(e) => setWantGmail(e.target.checked)} />
+              <span>Also let Jarvis read my Gmail (read-only)</span>
+            </label>
+            <button className={css.primary} style={{ marginTop: 4 }} disabled={busy} onClick={() => connect('google')}>
               {busy ? 'Opening Google…' : 'Connect Google'}
             </button>
             <p className={css.help}>
-              Google may warn that the app isn&apos;t verified: it&apos;s your own app, so click <b>Advanced → Go to …</b>, and tick both Calendar and Tasks.
+              Google may warn that the app isn&apos;t verified: it&apos;s your own app, so click <b>Advanced → Go to …</b>, and tick every box.
             </p>
           </>
         )}
@@ -308,6 +326,10 @@ export default function IntegrationsPanel() {
               <span>{live.todos ? (live.todos.error ? live.todos.error : `${live.todos.items.length} open in ${live.todos.listName}`) : 'Loading…'}</span>
               <span className={css.fieldLabel}>Time zone</span>
               <span>{google.timeZone}</span>
+              <span className={css.fieldLabel}>Add events</span>
+              <span className={google.calendarWrite ? css.replyOk : css.replyBad}>{google.calendarWrite ? 'Yes' : 'No: disconnect and connect again to allow it'}</span>
+              <span className={css.fieldLabel}>Gmail</span>
+              <span>{google.gmail ? 'Read-only, for summaries' : 'Off (tick the Gmail box when connecting)'}</span>
             </div>
             <div className={css.row}>
               <button
@@ -329,5 +351,93 @@ export default function IntegrationsPanel() {
         )}
       </section>
     </aside>
+  );
+}
+
+const CANVAS_DOCS = 'https://github.com/sohangottipati/usohan.github.io/blob/main/projector/docs/canvas.md';
+
+function CanvasCard({ status, onChange }: { status: CanvasStatus | null; onChange(): void }) {
+  const live = useEditor((s) => s.live);
+  const [baseUrl, setBaseUrl] = useState('elearn.ucr.edu');
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  if (!status) return null;
+  const cv = live.canvas;
+  return (
+    <section className={css.section}>
+      <h3 className={css.h3}>Canvas</h3>
+      {!status.connected ? (
+        <form
+          className={css.form}
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setMsg('');
+            try {
+              await api('/api/canvas/connect', { method: 'POST', body: JSON.stringify({ baseUrl, token }) });
+              setToken('');
+              onChange();
+            } catch (err: any) {
+              setMsg(err.message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <p className={css.muted}>Not connected. Read-only: due dates, submitted and missing work.</p>
+          <label className={css.field}>
+            <span className={css.fieldLabel}>Canvas address</span>
+            <input className={css.input} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="elearn.ucr.edu" />
+          </label>
+          <label className={css.field}>
+            <span className={css.fieldLabel}>Access token</span>
+            <input className={css.input} type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Paste from Canvas → Account → Settings" />
+            <span className={css.help}>
+              In Canvas: <b>Account → Settings → + New Access Token</b>, purpose &quot;Projector wall&quot;. It&apos;s stored on your server and never shown again.{' '}
+              <a className={css.link} href={CANVAS_DOCS} target="_blank" rel="noreferrer">
+                Steps
+              </a>
+            </span>
+          </label>
+          <button className={css.primary} disabled={busy || !token.trim() || !baseUrl.trim()}>
+            {busy ? 'Checking…' : 'Connect Canvas'}
+          </button>
+          {msg && <p className={css.errorText}>{msg}</p>}
+        </form>
+      ) : (
+        <>
+          <p className={css.replyOk}>
+            Connected{status.user ? ' as ' + status.user : ''} · {status.baseUrl.replace(/^https:\/\//, '')}
+          </p>
+          <div className={css.statusGrid} style={{ marginTop: 8 }}>
+            <span className={css.fieldLabel}>Work</span>
+            <span>
+              {cv
+                ? cv.error
+                  ? cv.error
+                  : `${cv.items.filter((i) => !i.submitted && i.due && Date.parse(i.due) > Date.now()).length} upcoming, ${cv.items.filter((i) => i.missing && !i.submitted).length} missing`
+                : 'Loading…'}
+            </span>
+          </div>
+          <div className={css.row}>
+            <button onClick={() => api('/api/canvas/refresh', { method: 'POST', body: '{}' }).catch(() => {})}>Refresh now</button>
+            <button
+              className={css.danger}
+              onClick={async () => {
+                if (!confirm('Disconnect Canvas? The Due soon widget and "what\'s due" stop until you connect again.')) return;
+                await api('/api/canvas/disconnect', { method: 'POST', body: '{}' }).catch(() => {});
+                onChange();
+              }}
+            >
+              Disconnect
+            </button>
+          </div>
+          <p className={css.help}>
+            Add a <b>Canvas: due soon</b> layer. Say &quot;what&apos;s due this week&quot; or &quot;any homework due tomorrow&quot;.
+          </p>
+        </>
+      )}
+    </section>
   );
 }

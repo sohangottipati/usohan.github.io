@@ -21,7 +21,7 @@ From the editor at https://sohan.website/projector/edit, open **Commands** in th
    - Replace `URL` with `https://projector-api.sohan.website/api/command`.
    - Tap the arrow to show more options:
      - **Method:** `POST`
-     - **Headers:** **Add new header**, key `Authorization`, text `Bearer YOUR_TOKEN` (the word *Bearer*, a space, then the token you copied).
+     - **Token (pick one):** either **Headers → Add new header** with key `Authorization` and text `Bearer YOUR_TOKEN` (the word *Bearer*, a space, then the token), or, simpler, add a second **Text** field to the JSON body below with key `token` and your token as the value.
      - **Request Body:** `JSON`. **Add new field → Text**, key `text`. For the value, tap it and choose the **Dictated Text** variable.
 4. **Add Action → Get Dictionary Value.** Set it to *Get* **Value** *for* `reply` *in* **Contents of URL**.
 5. **Add Action → Speak Text**, with **Dictionary Value** as the text. (Use **Show Result** instead if you'd rather read it than hear it.)
@@ -47,6 +47,9 @@ Duplicate the shortcut, delete **Dictate Text**, and set the `text` field to fix
 | skip the song · previous song · pause · play · volume 40 · turn it up · what's playing | Spotify (see [spotify.md](spotify.md)) |
 | add buy milk to my list · remind me to call mom tomorrow · complete buy milk · what's on my list | Google Tasks (see [google.md](google.md)) |
 | what's on my calendar today · what's next | Google Calendar |
+| add dentist next tuesday at 3 · undo that | Add calendar events (see [google.md](google.md)) |
+| check my email · any new emails? | Gmail summary (optional) |
+| what's due this week · any homework due tomorrow | Canvas (see [canvas.md](canvas.md)) |
 
 "Wall", "Hey Siri", "please" and punctuation are ignored, and numbers can be digits or words. With **Jarvis** turned on (editor → Jarvis), you can also say things any way you like, ask questions, or chain requests. See [jarvis.md](jarvis.md). The phrases live in [`projector/server/src/commands/parseText.ts`](../server/src/commands/parseText.ts); add a rule there to teach it new ones.
 

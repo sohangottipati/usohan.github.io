@@ -14,7 +14,7 @@ Jarvis is the wall's assistant. It understands requests the built-in phrases don
 3. The brain sees a short **snapshot** of the wall (time, scenes, timer, what's playing, upcoming events, to-dos) plus the last few exchanges. It answers with a plan: which wall commands to run, and what to say.
 4. The wall runs the commands. If any of them fails (say, Spotify isn't connected), the reply says what actually happened instead of the model's guess.
 
-The brain can only use the wall's own commands (timer, scenes, Spotify, to-dos, messages, blackout, briefing), so it can't do anything you couldn't do yourself.
+The brain can only use the wall's own commands (timer, scenes, Spotify, to-dos, calendar events, messages, blackout, briefing, Canvas, memory), so it can't do anything you couldn't do yourself. Email is never in its snapshot: inbox summaries are text-only, so a malicious email can't make it act.
 
 ## Choosing a brain (editor → **Jarvis**)
 
