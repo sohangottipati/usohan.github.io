@@ -93,3 +93,4 @@ You can deploy to `projector-wall.<you>.workers.dev` by commenting out `routes` 
 | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | From your Spotify developer app. See [spotify.md](spotify.md). |
 | `API_ORIGIN` (var in `wrangler.toml`) | Public address of the API, used for the Spotify and Google redirect URIs. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | From your Google Cloud OAuth client. See [google.md](google.md). |
+| `ANTHROPIC_API_KEY` (optional) | Only if Jarvis should use Claude. Workers AI (free) needs no key; it's the `[ai]` binding in `wrangler.toml`. See [jarvis.md](jarvis.md). |

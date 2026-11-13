@@ -49,7 +49,12 @@ export default function ProjectorPrivacyPage() {
           Sign-in tokens and the latest calendar, task and now-playing data are kept in the app&apos;s own storage on Cloudflare (a Durable
           Object). They never reach the projector or a browser as tokens.
         </li>
-        <li>Nothing is sold, shared with third parties, used for advertising, or used to train AI models.</li>
+        <li>Nothing is sold, used for advertising, or used to train AI models, and nothing is shared beyond the services named on this page.</li>
+        <li>
+          If the owner turns on the assistant (&quot;Jarvis&quot;), a spoken request is sent with a short snapshot (event titles and times,
+          open tasks, the song playing) to the AI provider the owner picked, Cloudflare Workers AI or Anthropic&apos;s API, only to work
+          out what to do. Neither provider trains models on this API traffic by default.
+        </li>
         <li>Calendar data is never modified. Tasks are only created or completed when the owner asks.</li>
       </ul>
 

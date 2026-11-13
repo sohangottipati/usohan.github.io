@@ -22,6 +22,14 @@ export interface Env {
   GOOGLE_AUTH_URL?: string;
   GOOGLE_TOKEN_URL?: string;
   GOOGLE_API_URL?: string;
+  /** Workers AI binding ([ai] in wrangler.toml): Jarvis's free brain and voice. */
+  AI?: Ai;
+  /** Optional: lets Jarvis use Claude (paid, from platform.claude.com). */
+  ANTHROPIC_API_KEY?: string;
+  /** Test-only stand-ins for Workers AI, Claude and Open-Meteo. */
+  AI_MOCK_URL?: string;
+  CLAUDE_MOCK_URL?: string;
+  WEATHER_API_URL?: string;
 }
 
 export function allowedOrigins(env: Env): string[] {

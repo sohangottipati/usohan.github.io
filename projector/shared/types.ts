@@ -212,6 +212,8 @@ export type ServerMessage =
   | { t: 'commandResult'; id: string; result: CommandResult }
   /** A command that ran, forwarded so widgets can react in onCommand(). */
   | { t: 'command'; command: Command }
+  /** Jarvis speaking through the projector: base64 audio (when available) and the words. */
+  | { t: 'speak'; text: string; audio: string | null; mime: string }
   | { t: 'error'; message: string };
 
 export type ClientMessage =

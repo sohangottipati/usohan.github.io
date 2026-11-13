@@ -17,7 +17,14 @@ import {
 import { validateProject } from '../../shared/validate';
 import { createSession, isEditor, randomToken, safeEqual, sessionCookie } from './auth';
 import { advanceTimer, runCommand } from './commands/handle';
-import { parseText } from './commands/parseText';
+import { parseTextDetailed } from './commands/parseText';
+import { defaultJarvisSettings, sanitizeJarvisSettings, type JarvisSettings } from '../../shared/jarvis';
+import { brainReady, think } from './jarvis/brain';
+import { composeBriefing } from './jarvis/briefing';
+import { buildContext } from './jarvis/context';
+import type { Exchange } from './jarvis/prompt';
+import { localDate, nextDailyTime } from './jarvis/time';
+import { synthesize } from './jarvis/voice';
 import { isLocalDev, isOriginAllowed, originOk, type Env } from './env';
 import { Google } from './integrations/google';
 import { Spotify, spotifyChanged } from './integrations/spotify';
@@ -43,6 +50,9 @@ const SPOTIFY_QUIET_AFTER_MS = 10 * 60 * 1000;
 // Google: to-dos every minute, calendar every 5 minutes, while a screen is connected.
 const TODOS_POLL_MS = 60 * 1000;
 const CALENDAR_POLL_MS = 5 * 60 * 1000;
+// Jarvis: keep a few recent exchanges for follow-ups; hold a missed briefing until a display connects.
+const MEMORY_SIZE = 6;
+const BRIEFING_HOLD_MS = 4 * 3600 * 1000;
 
 function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -67,13 +77,27 @@ export class Wall extends DurableObject<Env> {
   private google: Google;
   private nextGooglePoll = Infinity;
   private lastCalendarPoll = 0;
+  private jarvis: JarvisSettings = defaultJarvisSettings();
+  private memory: Exchange[] = [];
+  private lastBrainError: string | null = null;
+  private lastBrainMs = 0;
+  private announcedTimerEnd = 0;
+  private announcedEvents: string[] = [];
+  private lastBriefingDate = '';
+  private briefingPendingUntil = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.spotify = new Spotify(env, ctx.storage);
     this.google = new Google(env, ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
-      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog']);
+      const stored = await ctx.storage.get(['project', 'live', 'rev', 'displayKey', 'commandToken', 'commandLog', 'jarvis', 'jarvis:state']);
+      this.jarvis = sanitizeJarvisSettings(stored.get('jarvis'));
+      const js = (stored.get('jarvis:state') as any) || {};
+      this.announcedTimerEnd = js.announcedTimerEnd || 0;
+      this.announcedEvents = js.announcedEvents || [];
+      this.lastBriefingDate = js.lastBriefingDate || '';
+      this.briefingPendingUntil = js.briefingPendingUntil || 0;
       const p = stored.get('project');
       if (p && validateProject(p) === null) this.project = p as Project;
       const l = stored.get('live') as LiveState | undefined;
@@ -149,6 +173,24 @@ export class Wall extends DurableObject<Env> {
       return json({ token: this.commandToken });
     }
     if (path === '/api/commands' && req.method === 'GET') return json({ entries: this.commandLog });
+    if (path === '/api/jarvis' && req.method === 'GET') return json(this.jarvisStatus());
+    if (path === '/api/jarvis' && req.method === 'PUT') {
+      const body = await req.json().catch(() => null);
+      this.jarvis = sanitizeJarvisSettings(body);
+      await this.ctx.storage.put('jarvis', this.jarvis);
+      await this.scheduleAlarm();
+      return json(this.jarvisStatus());
+    }
+    if (path === '/api/jarvis/test-voice' && req.method === 'POST') {
+      const text = 'Voice check. This is ' + this.jarvis.name + ', at your service.';
+      const speech = await synthesize(this.jarvis, this.env, text);
+      const displays = this.ctx.getWebSockets('display').length;
+      if (speech) this.broadcast({ t: 'speak', text, audio: speech.audio, mime: speech.mime });
+      return json({ ok: !!speech, text, audio: speech ? speech.audio : null, mime: speech ? speech.mime : null, displays });
+    }
+    if (path === '/api/jarvis/briefing' && req.method === 'POST') {
+      return json(await this.execute('editor', undefined, { type: 'jarvis.briefing' }));
+    }
     if (path === '/api/integrations' && req.method === 'GET') {
       return json({ spotify: await this.spotify.status(), google: await this.google.status(), weather: { provider: 'Open-Meteo', configured: true } });
     }
@@ -228,7 +270,9 @@ export class Wall extends DurableObject<Env> {
     }
     if (typeof body === 'string') body = { text: body };
     if (!body || typeof body !== 'object') return json({ ok: false, reply: 'Send {"text": "..."} or {"type": "...", "payload": {...}}.' }, 400);
-    const result = await this.execute('api', body.text, body.type ? { type: String(body.type), payload: body.payload } : undefined);
+    const result = await this.execute('api', body.text, body.type ? { type: String(body.type), payload: body.payload } : undefined, {
+      speak: body.voice === 'wall',
+    });
     return json(result);
   }
 
@@ -340,56 +384,42 @@ export class Wall extends DurableObject<Env> {
     this.nextSpotifyPoll = this.ctx.getWebSockets().length ? now + interval : Infinity;
   }
 
-  /** Parses (if needed), runs, logs and broadcasts a command. */
-  private async execute(source: string, text?: string, command?: Command): Promise<CommandResult> {
+  /**
+   * Runs a request: a structured command, a known phrase (fast, free), or, with
+   * Jarvis on, anything else via the brain. Logs it, and speaks the reply on the
+   * wall when asked to (room mics) or when voice is set to "every reply".
+   */
+  private async execute(source: string, text?: string, command?: Command, opts: { speak?: boolean } = {}): Promise<CommandResult> {
     const now = Date.now();
-    let cmd: Command | null = command && command.type ? command : null;
     const input = typeof text === 'string' ? text.trim().slice(0, MAX_COMMAND_TEXT) : '';
-    if (!cmd && input) cmd = parseText(input);
-
     let result: CommandResult;
-    if (!cmd) {
-      result = input ? { ok: false, reply: `Sorry, I didn't understand "${input}".` } : { ok: false, reply: 'Empty command.' };
+    let logType: string | null = null;
+
+    if (command && command.type) {
+      result = await this.runOne(command, now);
+      logType = command.type;
+    } else if (!input) {
+      result = { ok: false, reply: 'Empty command.' };
     } else {
-      if (cmd.payload !== undefined && (typeof cmd.payload !== 'object' || cmd.payload === null)) cmd = { type: cmd.type };
-      let out: { result: CommandResult; live?: LiveState; project?: Project };
-      if (cmd.type.indexOf('spotify.') === 0) {
-        const r = await this.spotify.control(cmd, this.live.spotify, now);
-        out = { result: { ok: r.ok, reply: r.reply } };
-        // Show what we already know changed; the next poll confirms it.
-        if (r.patch && this.live.spotify) out.live = { ...this.live, spotify: { ...this.live.spotify, ...r.patch } };
-      } else if (cmd.type.indexOf('todo.') === 0 || cmd.type.indexOf('calendar.') === 0) {
-        const r = await this.google.control(cmd, this.live, now);
-        out = { result: { ok: r.ok, reply: r.reply } };
-        if (r.todos) out.live = { ...this.live, todos: r.todos };
-        // Confirm against Google shortly (ids, ordering, edits made elsewhere).
-        if (r.ok && cmd.type.indexOf('todo.') === 0 && cmd.type !== 'todo.list') this.nextGooglePoll = now + 1500;
+      const parsed = parseTextDetailed(input);
+      const brainOn = this.jarvis.provider !== 'off';
+      if (parsed.command && !(brainOn && parsed.loose)) {
+        result = await this.runOne(parsed.command, now);
+        logType = parsed.command.type;
+      } else if (brainOn) {
+        const r = await this.askJarvis(input, now, parsed.command);
+        result = r.result;
+        logType = r.logType;
       } else {
-        out = runCommand(cmd, { live: this.live, project: this.project, now });
+        result = { ok: false, reply: `Sorry, I didn't understand "${input}".` };
       }
-      if (cmd.type.indexOf('spotify.') === 0 && cmd.type !== 'spotify.status' && out.result.ok) {
-        // Spotify's state lags a little behind the command; look again shortly.
-        this.lastMusicAt = now;
-        this.nextSpotifyPoll = now + 700;
-      }
-      result = { ...out.result, command: cmd };
-      if (out.live) {
-        this.live = out.live;
-        this.broadcast({ t: 'live', live: this.live, serverTime: now });
-      }
-      if (out.project) {
-        this.project = out.project;
-        this.rev++;
-        this.broadcast({ t: 'project', project: this.project, rev: this.rev, serverTime: now });
-      }
-      if (result.ok) this.broadcast({ t: 'command', command: cmd });
-      if (out.live || out.project) this.dirty = true;
+      this.remember(input, result.reply, now);
     }
 
-    this.commandLog = [
-      { at: now, source, input: input || (cmd ? cmd.type : ''), type: cmd ? cmd.type : null, ok: result.ok, reply: result.reply },
-      ...this.commandLog,
-    ].slice(0, COMMAND_LOG_SIZE);
+    this.commandLog = [{ at: now, source, input: input || (command ? command.type : ''), type: logType, ok: result.ok, reply: result.reply }, ...this.commandLog].slice(
+      0,
+      COMMAND_LOG_SIZE,
+    );
     const logMsg = JSON.stringify({ t: 'commandLog', entries: this.commandLog } satisfies ServerMessage);
     for (const ws of this.ctx.getWebSockets('editor')) {
       try {
@@ -397,8 +427,205 @@ export class Wall extends DurableObject<Env> {
       } catch (e) {}
     }
     await this.ctx.storage.put('commandLog', this.commandLog);
+
+    // The briefing is an announcement: spoken whenever voice is on.
+    const briefing = logType === 'jarvis.briefing' && result.ok;
+    if (opts.speak || this.jarvis.voice === 'all' || (briefing && this.jarvis.voice !== 'off')) await this.say(result.reply);
     await this.markDirty();
     return result;
+  }
+
+  /** Runs one structured command and broadcasts what changed. */
+  private async runOne(cmd: Command, now: number): Promise<CommandResult> {
+    if (cmd.payload !== undefined && (typeof cmd.payload !== 'object' || cmd.payload === null)) cmd = { type: cmd.type };
+    let out: { result: CommandResult; live?: LiveState; project?: Project };
+    if (cmd.type === 'jarvis.briefing') {
+      out = { result: { ok: true, reply: await composeBriefing(this.jarvis, this.env, this.live, now) } };
+      this.lastBriefingDate = localDate(now, this.jarvis.timeZone);
+      this.briefingPendingUntil = 0;
+      await this.saveJarvisState();
+    } else if (cmd.type.indexOf('spotify.') === 0) {
+      const r = await this.spotify.control(cmd, this.live.spotify, now);
+      out = { result: { ok: r.ok, reply: r.reply } };
+      // Show what we already know changed; the next poll confirms it.
+      if (r.patch && this.live.spotify) out.live = { ...this.live, spotify: { ...this.live.spotify, ...r.patch } };
+    } else if (cmd.type.indexOf('todo.') === 0 || cmd.type.indexOf('calendar.') === 0) {
+      const r = await this.google.control(cmd, this.live, now);
+      out = { result: { ok: r.ok, reply: r.reply } };
+      if (r.todos) out.live = { ...this.live, todos: r.todos };
+      // Confirm against Google shortly (ids, ordering, edits made elsewhere).
+      if (r.ok && cmd.type.indexOf('todo.') === 0 && cmd.type !== 'todo.list') this.nextGooglePoll = now + 1500;
+    } else {
+      out = runCommand(cmd, { live: this.live, project: this.project, now });
+    }
+    if (cmd.type.indexOf('spotify.') === 0 && cmd.type !== 'spotify.status' && out.result.ok) {
+      // Spotify's state lags a little behind the command; look again shortly.
+      this.lastMusicAt = now;
+      this.nextSpotifyPoll = now + 700;
+    }
+    if (out.live) {
+      this.live = out.live;
+      this.broadcast({ t: 'live', live: this.live, serverTime: now });
+    }
+    if (out.project) {
+      this.project = out.project;
+      this.rev++;
+      this.broadcast({ t: 'project', project: this.project, rev: this.rev, serverTime: now });
+    }
+    if (out.result.ok) this.broadcast({ t: 'command', command: cmd });
+    if (out.live || out.project) this.dirty = true;
+    return { ...out.result, command: cmd };
+  }
+
+  // ---------- Jarvis ----------
+
+  /** Ask the brain for a plan and carry it out. `fallback` is the parser's guess, used if the brain is unreachable. */
+  private async askJarvis(input: string, now: number, fallback: Command | null): Promise<{ result: CommandResult; logType: string | null }> {
+    const memory = this.memory.filter((m) => now - m.at < this.jarvis.memoryMinutes * 60000);
+    const context = buildContext(this.live, this.project, now, this.jarvis.timeZone);
+    const r = await think(this.jarvis, this.env, input, context, memory);
+    this.lastBrainMs = r.ms;
+    if ('error' in r) {
+      this.lastBrainError = r.error;
+      if (fallback) return { result: await this.runOne(fallback, now), logType: fallback.type };
+      return { result: { ok: false, reply: `${this.jarvis.name} couldn't think that through: ${r.error.replace(/\.$/, '')}.` }, logType: null };
+    }
+    this.lastBrainError = null;
+    const plan = r.plan;
+    const results: CommandResult[] = [];
+    for (const c of plan.commands) results.push(await this.runOne(c, Date.now()));
+    const failed = results.filter((x) => !x.ok);
+    // The model wrote its reply before anything ran: trust it only if everything worked.
+    let reply = plan.reply;
+    if (failed.length) reply = results.map((x) => x.reply).join(' ');
+    else if (!reply) reply = results.map((x) => x.reply).join(' ') || 'Done.';
+    const types = plan.commands.map((c) => c.type);
+    return { result: { ok: !failed.length, reply, command: plan.commands[0] }, logType: types.length ? 'jarvis: ' + types.join(', ') : 'jarvis: answer' };
+  }
+
+  private remember(user: string, reply: string, now: number) {
+    this.memory = [...this.memory.filter((m) => now - m.at < this.jarvis.memoryMinutes * 60000), { at: now, user, reply }].slice(-MEMORY_SIZE);
+  }
+
+  private jarvisStatus() {
+    return {
+      settings: this.jarvis,
+      status: {
+        ready: brainReady(this.jarvis, this.env),
+        workersAI: !!(this.env.AI || this.env.AI_MOCK_URL),
+        claudeKey: !!this.env.ANTHROPIC_API_KEY,
+        lastError: this.lastBrainError,
+        lastMs: this.lastBrainMs,
+        displays: this.ctx.getWebSockets('display').length,
+        nextBriefing: this.jarvis.briefing ? nextDailyTime(Date.now(), this.jarvis.briefingTime, this.jarvis.timeZone) : null,
+      },
+    };
+  }
+
+  /** Speak through the projector(s), and optionally caption it on the wall. */
+  private async say(text: string) {
+    if (!text || this.jarvis.voice === 'off') return;
+    if (this.jarvis.captions) {
+      const now = Date.now();
+      const seconds = Math.max(4, Math.min(20, Math.round(text.split(/\s+/).length * 0.45) + 2));
+      this.live = { ...this.live, message: { id: 'j' + now.toString(36), text, until: now + seconds * 1000 } };
+      this.broadcast({ t: 'live', live: this.live, serverTime: now });
+      this.dirty = true;
+    }
+    if (!this.ctx.getWebSockets('display').length) return; // nobody to hear it
+    const speech = await synthesize(this.jarvis, this.env, text);
+    this.broadcast({ t: 'speak', text, audio: speech ? speech.audio : null, mime: speech ? speech.mime : 'audio/mpeg' });
+  }
+
+  /** Something Jarvis says on its own (timer done, event soon). Logged like a command. */
+  private async announce(text: string) {
+    const now = Date.now();
+    this.commandLog = [{ at: now, source: 'jarvis', input: '(announcement)', type: 'jarvis.announce', ok: true, reply: text }, ...this.commandLog].slice(0, COMMAND_LOG_SIZE);
+    const logMsg = JSON.stringify({ t: 'commandLog', entries: this.commandLog } satisfies ServerMessage);
+    for (const ws of this.ctx.getWebSockets('editor')) {
+      try {
+        ws.send(logMsg);
+      } catch (e) {}
+    }
+    await this.ctx.storage.put('commandLog', this.commandLog);
+    await this.say(text);
+  }
+
+  private async saveJarvisState() {
+    await this.ctx.storage.put('jarvis:state', {
+      announcedTimerEnd: this.announcedTimerEnd,
+      announcedEvents: this.announcedEvents,
+      lastBriefingDate: this.lastBriefingDate,
+      briefingPendingUntil: this.briefingPendingUntil,
+    });
+  }
+
+  /** Timed events that should get a heads-up: [eventId, start]. */
+  private upcomingReminders(): [string, number][] {
+    const cal = this.live.calendar;
+    if (!cal || !this.jarvis.announceEvents) return [];
+    const out: [string, number][] = [];
+    for (const e of cal.events) {
+      if (e.allDay || this.announcedEvents.indexOf(e.id) >= 0) continue;
+      const start = Date.parse(e.start);
+      if (isFinite(start)) out.push([e.id, start]);
+    }
+    return out;
+  }
+
+  /** When the next announcement is due (Infinity if none). */
+  private nextAnnouncementAt(): number {
+    if (this.jarvis.voice === 'off' && !this.jarvis.captions) return Infinity;
+    const now = Date.now();
+    let next = Infinity;
+    const t = this.live.timer;
+    if (this.jarvis.announceTimers && t && t.status === 'running' && !t.pomodoro && t.endsAt > this.announcedTimerEnd) next = Math.min(next, t.endsAt);
+    const lead = this.jarvis.eventLeadMinutes * 60000;
+    for (const [, start] of this.upcomingReminders()) if (start > now) next = Math.min(next, Math.max(now, start - lead));
+    if (this.jarvis.briefing) {
+      next = Math.min(next, nextDailyTime(now, this.jarvis.briefingTime, this.jarvis.timeZone));
+      if (this.briefingPendingUntil > now && this.ctx.getWebSockets('display').length) next = Math.min(next, now + 1500);
+    }
+    return next;
+  }
+
+  private async checkAnnouncements(now: number) {
+    if (this.jarvis.voice === 'off' && !this.jarvis.captions) return;
+    let changed = false;
+    // Timer finished (plain timers; Pomodoro phases are announced as they roll over).
+    const t = this.live.timer;
+    if (this.jarvis.announceTimers && t && t.status === 'running' && !t.pomodoro && t.endsAt <= now && t.endsAt > this.announcedTimerEnd) {
+      this.announcedTimerEnd = t.endsAt;
+      changed = true;
+      if (now - t.endsAt < 60000) await this.announce((t.label ? 'Your ' + t.label.toLowerCase() + ' timer' : 'Your timer') + ' is done.');
+    }
+    // Events starting soon.
+    const lead = this.jarvis.eventLeadMinutes * 60000;
+    const cal = this.live.calendar;
+    for (const [id, start] of this.upcomingReminders()) {
+      if (start - lead <= now && now < start) {
+        const ev = cal && cal.events.find((e) => e.id === id);
+        this.announcedEvents = [...this.announcedEvents, id].slice(-100);
+        changed = true;
+        const m = Math.max(1, Math.round((start - now) / 60000));
+        if (ev) await this.announce('Heads up: ' + ev.title + ' starts in ' + m + (m === 1 ? ' minute.' : ' minutes.'));
+      }
+    }
+    // Daily briefing: deliver now if a display is listening, otherwise hold it for a few hours.
+    if (this.jarvis.briefing) {
+      const today = localDate(now, this.jarvis.timeZone);
+      const dueToday = nextDailyTime(now - 24 * 3600 * 1000, this.jarvis.briefingTime, this.jarvis.timeZone);
+      const due = this.lastBriefingDate !== today && (now >= dueToday && now - dueToday < BRIEFING_HOLD_MS);
+      if (due || this.briefingPendingUntil > now) {
+        if (this.ctx.getWebSockets('display').length) {
+          await this.execute('jarvis', undefined, { type: 'jarvis.briefing' });
+        } else if (!this.briefingPendingUntil) {
+          this.briefingPendingUntil = dueToday + BRIEFING_HOLD_MS;
+          changed = true;
+        }
+      }
+    }
+    if (changed) await this.saveJarvisState();
   }
 
   // ---------- media ----------
@@ -506,7 +733,7 @@ export class Wall extends DurableObject<Env> {
     if (await this.google.connected()) {
       if (this.nextGooglePoll > Date.now() + 1000) this.nextGooglePoll = Date.now() + 300;
     }
-    await this.scheduleAlarm();
+    await this.scheduleAlarm(); // also picks up a held briefing once a display connects
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -589,7 +816,7 @@ export class Wall extends DurableObject<Env> {
     if (this.dirty) next = this.lastPersist + PERSIST_INTERVAL_MS;
     const t = this.live.timer;
     if (t && t.status === 'running' && t.pomodoro) next = Math.min(next, t.endsAt);
-    next = Math.min(next, this.nextSpotifyPoll, this.nextGooglePoll);
+    next = Math.min(next, this.nextSpotifyPoll, this.nextGooglePoll, this.nextAnnouncementAt());
     const current = await this.ctx.storage.getAlarm();
     if (next === Infinity) {
       if (current !== null) await this.ctx.storage.deleteAlarm();
@@ -609,11 +836,21 @@ export class Wall extends DurableObject<Env> {
   async alarm() {
     // Roll Pomodoro phases forward (several, if the object slept through them).
     let changed = false;
+    let phase: string | null = null;
     for (let i = 0; i < 20; i++) {
       const next = advanceTimer(this.live, Date.now());
       if (!next) break;
       this.live = next;
       changed = true;
+      phase = next.timer.pomodoro ? next.timer.pomodoro.phase : null;
+    }
+    if (phase && this.jarvis.announceTimers) {
+      const t = this.live.timer;
+      await this.announce(
+        phase === 'break'
+          ? 'Focus session done. Take ' + Math.round(t.durationMs / 60000) + ' minutes.'
+          : "Break's over. Back to focus.",
+      );
     }
     if (changed) {
       this.broadcast({ t: 'live', live: this.live, serverTime: Date.now() });
@@ -621,6 +858,7 @@ export class Wall extends DurableObject<Env> {
     }
     if (Date.now() >= this.nextSpotifyPoll - 50) await this.pollSpotify();
     if (Date.now() >= this.nextGooglePoll - 50) await this.pollGoogle();
+    await this.checkAnnouncements(Date.now());
     await this.persist();
     await this.scheduleAlarm();
   }

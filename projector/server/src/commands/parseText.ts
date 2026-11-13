@@ -120,6 +120,11 @@ function stripLead(original: string): string {
 interface Rule {
   /** Shown in docs/tests; not used at runtime. */
   example: string;
+  /**
+   * The match is a guess (e.g. a bare "pause" could mean the music or the timer).
+   * With Jarvis on, loose matches go to the brain, which can see what's going on.
+   */
+  loose?: (t: string) => boolean;
   test: RegExp;
   build(t: string, original: string, m: RegExpExecArray): Command | null;
 }
@@ -139,6 +144,13 @@ function timerLabel(t: string): string {
 }
 
 const RULES: Rule[] = [
+  // ----- jarvis -----
+  {
+    example: 'good morning',
+    test: /^(good morning|morning briefing|brief me|daily briefing|give me (a|my|the) (briefing|rundown)|what('s| does) my day look like)\b/,
+    build: () => ({ type: 'jarvis.briefing' }),
+  },
+
   // ----- timer -----
   {
     example: 'pomodoro',
@@ -179,6 +191,7 @@ const RULES: Rule[] = [
   // ----- messages (before timers: "show X for 30 seconds" is not a timer) -----
   {
     example: 'say dinner is ready',
+    loose: (t) => !/^say\b/.test(t),
     test: /^(say|show|display|write|put up|post)\s+(?!(the\s+)?(wall|display|everything)$)(.+)$/,
     build: (t, original) => {
       let text = tail(original, /\b(say|show|display|write|put up|post)\s+/i);
@@ -317,11 +330,13 @@ const RULES: Rule[] = [
   },
   {
     example: 'pause the music',
+    loose: (t) => !/(music|song|spotify|playback|track)/.test(t),
     test: /^(pause|stop)(\s+(the\s+)?(music|song|spotify|playback|track))?$/,
     build: () => ({ type: 'spotify.pause' }),
   },
   {
     example: 'play music',
+    loose: (t) => !/(music|song|spotify|playback|track)/.test(t),
     test: /^(play|resume|unpause)(\s+(the\s+)?(music|song|spotify|playback|track))?$/,
     build: () => ({ type: 'spotify.play' }),
   },
@@ -330,15 +345,22 @@ const RULES: Rule[] = [
 
 /** Parses free text into a command, or null if nothing matched. */
 export function parseText(input: string): Command | null {
+  return parseTextDetailed(input).command;
+}
+
+/** Like parseText, plus whether the match was only a guess (see Rule.loose). */
+export function parseTextDetailed(input: string): { command: Command | null; loose: boolean } {
   const t = normalize(input);
-  if (!t) return null;
+  if (!t) return { command: null, loose: false };
+  // "focus mode, 25 minute timer and pause the music" is several requests; one rule would catch only one.
+  const several = /[,;]/.test(input) || /\band\b(?! a half)/.test(t);
   for (const rule of RULES) {
     const m = rule.test.exec(t);
     if (!m) continue;
     const cmd = rule.build(t, input.trim(), m);
-    if (cmd) return cmd;
+    if (cmd) return { command: cmd, loose: several || !!(rule.loose && rule.loose(t)) };
   }
-  return null;
+  return { command: null, loose: false };
 }
 
 /** Example phrases, one per rule (used by the tests and the docs). */

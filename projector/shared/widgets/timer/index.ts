@@ -157,6 +157,8 @@ export const timerWidget: WidgetDefinition<TimerSettings> = {
 
       if (finished && !holdOver) {
         time.textContent = s.doneText || '0:00';
+        // Words are wider than "12:34": shrink so they fit inside the ring.
+        time.style.fontSize = Math.round(s.size * (s.doneText && s.doneText.length > 5 ? 0.6 : 1)) + 'px';
         root.style.animation = s.flash ? 'wallTimerFlash 1s ease-in-out infinite' : '';
         // Chime once per finish, and only if we saw it happen (not on a page load much later).
         if (s.chime && ctx.mode === 'display' && chimedFor !== timer.endsAt && finishedFor < 5000) {
@@ -165,6 +167,7 @@ export const timerWidget: WidgetDefinition<TimerSettings> = {
         }
       } else {
         time.textContent = formatClock(idle ? 0 : remaining);
+        time.style.fontSize = s.size + 'px';
         root.style.animation = '';
       }
 
